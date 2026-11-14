@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Physics Lecturer</title>
 <style>
-:root{--bg:#f6f5f1;--panel:#fff;--ink:#1c1b19;--mute:#6b6963;--line:#dedbd3;--acc:#2f5d8a;--acc2:#e8eff6;--hl:#fff2c4;--err:#b3261e;--ok:#2e7d4f}
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#161615;--panel:#212120;--ink:#ecebe6;--mute:#9a978f;--line:#363532;--acc:#7fb0e0;--acc2:#27323d;--hl:#4a3f16;--err:#ff8a80;--ok:#5fbf86}}
-:root[data-theme="dark"]{--bg:#161615;--panel:#212120;--ink:#ecebe6;--mute:#9a978f;--line:#363532;--acc:#7fb0e0;--acc2:#27323d;--hl:#4a3f16;--err:#ff8a80;--ok:#5fbf86}
+:root{--bg:#f6f5f1;--panel:#fff;--ink:#1c1b19;--mute:#6b6963;--line:#dedbd3;--acc:#2f5d8a;--acc2:#e8eff6;--hl:#fff2c4;--err:#b3261e;--ok:#2e7d4f;--on-acc:#fff}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#161615;--panel:#212120;--ink:#ecebe6;--mute:#9a978f;--line:#363532;--acc:#7fb0e0;--acc2:#27323d;--hl:#4a3f16;--err:#ff8a80;--ok:#5fbf86;--on-acc:#0d1b2a}}
+:root[data-theme="dark"]{--bg:#161615;--panel:#212120;--ink:#ecebe6;--mute:#9a978f;--line:#363532;--acc:#7fb0e0;--acc2:#27323d;--hl:#4a3f16;--err:#ff8a80;--ok:#5fbf86;--on-acc:#0d1b2a}
 *{box-sizing:border-box}
 html,body{height:100%;margin:0}
 body{background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;display:flex;flex-direction:column}
@@ -17,7 +17,7 @@ header .sp{flex:1}
 button,select,input,textarea{font:inherit;color:inherit}
 button{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 12px;cursor:pointer}
 button:hover{border-color:var(--acc)}
-button.primary{background:var(--acc);color:#fff;border-color:var(--acc)}
+button.primary{background:var(--acc);color:var(--on-acc);border-color:var(--acc)}
 button:disabled{opacity:.5;cursor:default}
 select,input[type=password],input[type=text],textarea{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 8px}
 main{flex:1;display:grid;grid-template-columns:minmax(0,var(--leftw,50%)) 10px minmax(0,1fr);min-height:0}
@@ -34,16 +34,38 @@ body.dragging{user-select:none;cursor:col-resize}
 #pdfwrap canvas{max-width:100%;height:auto;box-shadow:0 1px 6px rgba(0,0,0,.2);background:#fff}
 #empty{padding:40px 24px;max-width:460px;margin:auto;text-align:center;color:var(--mute)}
 #right{overflow:hidden}
-#chunks{display:flex;gap:6px;padding:8px 12px;overflow-x:auto;border-bottom:1px solid var(--line);background:var(--panel)}
-#chunks button{white-space:nowrap;font-size:13px;padding:4px 10px}
-#chunks button.cur{background:var(--acc2);border-color:var(--acc)}
-#chunks button.done::after{content:" ✓";color:var(--acc)}
-#player{padding:10px 12px;border-bottom:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;gap:8px}
-#player .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-#seek{flex:1;min-width:120px}
-#status{font-size:13px;color:var(--mute);min-height:20px}
+#ctl{display:flex;flex-direction:column;gap:8px;padding:10px 14px 8px;background:var(--panel);border-bottom:1px solid var(--line)}
+.crow{display:flex;gap:6px;align-items:center;min-width:0}
+#chapter{flex:1;min-width:0;border:1px solid transparent;background:var(--bg);font-weight:600;padding:6px 10px;border-radius:10px;text-overflow:ellipsis}
+#chapter:hover{border-color:var(--line)}
+#chapInfo{display:none}
+.seg{display:inline-flex;background:var(--bg);border-radius:10px;padding:2px;flex:none}
+.seg button{border:0;background:transparent;padding:4px 11px;border-radius:8px;font-size:13px;color:var(--mute)}
+.seg button:hover{border:0;color:var(--ink)}
+.seg button.on{background:var(--panel);color:var(--ink);box-shadow:0 0 0 1px var(--line)}
+#chunks{display:flex;gap:4px;overflow-x:auto;scrollbar-width:thin;padding-bottom:2px}
+#chunks button{white-space:nowrap;font-size:12px;padding:2px 9px;border-radius:999px;border-color:transparent;background:var(--bg);color:var(--mute)}
+#chunks button:hover{color:var(--ink);border-color:transparent}
+#chunks button.cur{background:var(--acc2);color:var(--acc);font-weight:600}
+#chunks button.done::after{content:" ✓";opacity:.7}
+.play{flex-wrap:wrap;row-gap:6px}
+.ib{width:34px;height:34px;padding:0;display:inline-grid;place-items:center;border-radius:50%;border:0;background:transparent;color:var(--ink);flex:none}
+.ib:hover{background:var(--bg);border:0}
+.ib svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+#btnPlay{width:42px;height:42px;background:var(--acc);color:var(--on-acc)}
+#btnPlay:hover{background:var(--acc);filter:brightness(1.1)}
+#btnGen{display:inline-flex;gap:7px;align-items:center;border-radius:999px;padding:8px 16px;flex:none}
+#btnGen svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linejoin:round}
+#seek{flex:1;min-width:70px;accent-color:var(--acc)}
+#time{font-size:12px;color:var(--mute);font-variant-numeric:tabular-nums;white-space:nowrap}
+#speed{border:0;background:var(--bg);border-radius:999px;padding:5px 8px;font-size:12px;appearance:none;-webkit-appearance:none;text-align:center;cursor:pointer}
+#btnRecap{display:inline-flex;gap:5px;align-items:center;border:0;background:var(--bg);border-radius:999px;padding:5px 11px;font-size:12px;color:var(--mute)}
+#btnRecap:hover{color:var(--ink);border:0}
+#btnRecap svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round}
+#status{font-size:12px;color:var(--mute)}
+#status:empty{display:none}
 #status.err{color:var(--err)}
-#script{flex:1;overflow:auto;padding:14px 18px;font-size:16px;line-height:1.65}
+#script{flex:1;overflow:auto;padding:14px 56px 14px 18px;font-size:16px;line-height:1.65}
 #script p{margin:0 0 12px;padding:2px 6px;border-radius:6px}
 #script p.now{background:var(--hl)}
 #qa{border-top:1px solid var(--line);background:var(--panel);padding:8px 12px;display:flex;flex-direction:column;gap:8px;max-height:42%}
@@ -52,7 +74,10 @@ body.dragging{user-select:none;cursor:col-resize}
 #log .a{white-space:pre-wrap}
 #askrow{display:flex;gap:8px}
 #askrow textarea{flex:1;resize:none;height:44px}
-dialog{border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--ink);max-width:460px;width:92vw}
+dialog{border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--ink);max-width:480px;width:92vw;max-height:92vh;overflow:auto}
+.howto{margin:8px 0 4px;padding-left:20px;font-size:13px;color:var(--ink)}
+.howto li{margin:3px 0}
+dialog a{color:var(--acc)}
 dialog label{display:block;margin:10px 0 4px;font-size:13px;color:var(--mute)}
 dialog input,dialog select{width:100%}
 small.hint{color:var(--mute)}
@@ -138,27 +163,25 @@ small.hint{color:var(--mute)}
   </section>
   <div id="split" role="separator" aria-orientation="vertical" aria-label="Resize panels" tabindex="0" title="Drag to resize · double-click to reset"></div>
   <section class="pane" id="right">
-    <div class="bar">
-      <select id="chapter"></select>
-      <small class="hint" id="chapInfo"></small>
-    </div>
-    <div id="chunks"></div>
-    <div id="player">
-      <div class="row">
-        <button id="btnPrev" title="Previous section">⏮</button>
-        <button id="btnGen" class="primary" hidden>Generate lecture</button>
-        <button id="btnPlay" class="primary" style="min-width:84px">▶ Play</button>
-        <button id="btnNext" title="Next section">⏭</button>
-        <button id="btnBack" title="Back 15 seconds">−15s</button>
-        <input type="range" id="seek" min="0" max="1000" value="0">
-        <span id="time" style="font-size:13px;color:var(--mute);min-width:84px;text-align:right">0:00 / 0:00</span>
+    <div id="ctl">
+      <div class="crow">
+        <select id="chapter" title="Chapter"></select>
+        <small id="chapInfo"></small>
+        <div class="seg" id="styleSeg" role="group" aria-label="Lecture style" title="Concise: key points only. Full: everything on the page.">
+          <button type="button" data-v="concise">Concise</button><button type="button" data-v="standard">Full</button>
+        </div>
       </div>
-      <div class="row">
-        <label style="font-size:13px">Speed
-          <select id="speed"><option>0.75</option><option>1</option><option>1.25</option><option>1.5</option><option>1.75</option><option>2</option></select>
-        </label>
-        <button id="btnRecap">Recap so far</button>
-        <small class="hint">Keys: Space play/pause · [ slower · ] faster</small>
+      <div id="chunks"></div>
+      <div class="crow play">
+        <button id="btnPrev" class="ib" title="Previous section" aria-label="Previous section"><svg viewBox="0 0 24 24"><polygon points="19 20 9 12 19 4 19 20"/><line x1="5" y1="19" x2="5" y2="5"/></svg></button>
+        <button id="btnGen" class="primary" hidden></button>
+        <button id="btnPlay" class="ib" title="Play (Space)" aria-label="Play"></button>
+        <button id="btnNext" class="ib" title="Next section" aria-label="Next section"><svg viewBox="0 0 24 24"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg></button>
+        <button id="btnBack" class="ib" title="Back 15 seconds" aria-label="Back 15 seconds"><svg viewBox="0 0 24 24"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1L3.5 8.5"/><polyline points="3.5 3.5 3.5 8.5 8.5 8.5"/><text x="12" y="15.2" font-size="7.5" text-anchor="middle" fill="currentColor" stroke="none">15</text></svg></button>
+        <input type="range" id="seek" min="0" max="1000" value="0" aria-label="Position">
+        <span id="time">0:00 / 0:00</span>
+        <select id="speed" title="Playback speed ( [ slower · ] faster )" aria-label="Playback speed"><option value="0.75">0.75×</option><option value="1">1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="1.75">1.75×</option><option value="2">2×</option></select>
+        <button id="btnRecap" title="Recap what I have heard so far"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h9"/></svg>Recap</button>
       </div>
       <div id="status"></div>
     </div>
@@ -192,8 +215,14 @@ small.hint{color:var(--mute)}
 <dialog id="dlg">
   <form method="dialog">
     <h3 style="margin:0 0 4px">Settings</h3>
-    <label>Gemini API key (kept only in this browser)</label>
-    <input type="password" id="key" autocomplete="off" placeholder="AIza… or AQ.…">
+    <label for="key">Gemini API key</label>
+    <input type="text" id="key" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="Paste your key here (starts with AIza… or AQ.…)">
+    <ol class="howto">
+      <li>Open <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio: API keys</a> and sign in with a Google account.</li>
+      <li>Click <b>Create API key</b> and pick a Google Cloud project (a new one is fine).</li>
+      <li>Copy the key, paste it above, and press <b>Save</b>.</li>
+    </ol>
+    <small class="hint">The key stays in this browser only. To see your projects and keys, open the <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Google Cloud credentials page</a>.</small>
     <label>Voice</label>
     <select id="voice"></select>
     <label>Lecture model (writes the lecture and answers questions)</label>
@@ -216,8 +245,6 @@ small.hint{color:var(--mute)}
       <option value="gemini-2.5-flash-preview-tts">Gemini 2.5 Flash TTS (preview)</option>
       <option value="gemini-2.5-pro-preview-tts">Gemini 2.5 Pro TTS (preview)</option>
     </select>
-    <label>Lecture style</label>
-    <select id="detail"><option value="concise">Concise: key points only (recommended)</option><option value="standard">Standard: covers everything on the page</option></select>
     <small class="hint">If the chosen model is busy or slow, the app tries the others automatically.</small>
     <label>Pages per section</label>
     <select id="chunkPages"><option value="2">2 pages</option><option value="3" selected>3 pages</option><option value="4">4 pages</option></select>
@@ -322,7 +349,7 @@ function buildChunks(){
   for(let p=ch.start,i=0;p<=ch.end;p+=per,i++){const pages=[];for(let q=p;q<Math.min(p+per,ch.end+1);q++)pages.push(q);chunks.push({i,pages,key:`ch${ch.n}_p${pages[0]}-${pages[pages.length-1]}${cfg.get('detail','concise')==='standard'?'':'_concise'}`})}
   $('chapInfo').textContent=`PDF pages ${ch.start}–${ch.end} · ${chunks.length} sections`;
   const box=$('chunks');box.innerHTML='';
-  chunks.forEach(c=>{const b=document.createElement('button');b.textContent=`pp. ${c.pages[0]}–${c.pages[c.pages.length-1]}`;b.onclick=()=>selectChunk(c.i);b.dataset.i=c.i;box.appendChild(b);
+  chunks.forEach(c=>{const b=document.createElement('button');b.textContent=`${c.pages[0]}–${c.pages[c.pages.length-1]}`;b.title=`PDF pages ${c.pages[0]} to ${c.pages[c.pages.length-1]}`;b.onclick=()=>selectChunk(c.i);b.dataset.i=c.i;box.appendChild(b);
     DB.get('script:'+c.key).then(s=>{if(s&&s.audio)b.classList.add('done')})});
 }
 function markCurrent(){document.querySelectorAll('#chunks button').forEach(b=>b.classList.toggle('cur',+b.dataset.i===chunkIdx));
@@ -426,7 +453,7 @@ function splitSegments(text,max=1300){
 function b64ToBytes(b){const s=atob(b);const u=new Uint8Array(s.length);for(let i=0;i<s.length;i++)u[i]=s.charCodeAt(i);return u}
 async function tts(text,ctl){
   const voice=cfg.get('voice','Kore');
-  const r=await gem(cfg.get('ttsModel','gemini-3.8-flash-tts'),{contents:[{parts:[{text:'Say in a calm, clear, friendly instructor voice, at a natural teaching pace: '+text}]}],generationConfig:{responseModalities:['AUDIO'],speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:voice}}}}},4,ctl);
+  const r=await gem(cfg.get('ttsModel','gemini-3.8-flash-tts'),{contents:[{parts:[{text:text}]}],generationConfig:{responseModalities:['AUDIO'],speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:voice}}}}},4,ctl);
   const p=r.candidates&&r.candidates[0]&&r.candidates[0].content&&r.candidates[0].content.parts&&r.candidates[0].content.parts.find(x=>x.inlineData);
   if(!p)throw new Error('The voice model returned no audio.');
   return b64ToBytes(p.inlineData.data);
@@ -534,9 +561,9 @@ function updateButtons(){
   const failedHere=job&&job.error&&job.i===chunkIdx;
   $('btnGen').hidden=secReady||here;
   $('btnGen').disabled=active&&!here;
-  $('btnGen').textContent=failedHere?'Try again':'Generate lecture';
+  $('btnGen').innerHTML=IC.gen+'<span>'+(failedHere?'Try again':'Generate lecture')+'</span>';
   $('btnGen').title=(active&&!here)?'Another section is generating right now':'';
-  $('btnPlay').disabled=!secReady;$('script').classList.toggle('seekable',secReady);
+  $('btnPlay').hidden=!secReady;$('script').classList.toggle('seekable',secReady);
 }
 $('btnGen').onclick=()=>generate(chunkIdx,false);
 $('btnCancel').onclick=()=>{cancelJob();renderProg();updateButtons();status('Cancelled.')};
@@ -593,7 +620,11 @@ $('script').addEventListener('click',e=>{
 });
 $('script').addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){const p=e.target.closest&&e.target.closest('p[data-k]');if(p){e.preventDefault();e.stopPropagation();seekToPara(+p.dataset.k)}}});
 function fmt(s){if(!isFinite(s))s=0;s=Math.floor(s);return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')}
-function setPlayLabel(){$('btnPlay').textContent=(!audio.paused&&!audio.ended)?'⏸ Pause':'▶ Play'}
+const IC={
+ play:'<svg viewBox="0 0 24 24"><polygon points="8 4.5 19.5 12 8 19.5 8 4.5" fill="currentColor" stroke="none"/></svg>',
+ pause:'<svg viewBox="0 0 24 24"><rect x="6" y="4.5" width="4" height="15" rx="1" fill="currentColor" stroke="none"/><rect x="14" y="4.5" width="4" height="15" rx="1" fill="currentColor" stroke="none"/></svg>',
+ gen:'<svg viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z"/></svg>'};
+function setPlayLabel(){const on=!audio.paused&&!audio.ended;$('btnPlay').innerHTML=on?IC.pause:IC.play;$('btnPlay').title=on?'Pause (Space)':'Play (Space)';$('btnPlay').setAttribute('aria-label',on?'Pause':'Play')}
 async function startPlayback(){
   if(!secReady)return;
   if(!ansAudio.paused)ansAudio.pause();
@@ -709,6 +740,15 @@ if(SR){$('btnMic').hidden=false;$('btnMic').onclick=()=>{const r=new SR();r.lang
   window.addEventListener('resize',refit);
 })();
 
+// ---------- Concise / Full toggle ----------
+function syncSeg(){const v=cfg.get('detail','concise');document.querySelectorAll('#styleSeg button').forEach(b=>{const on=b.dataset.v===v;b.classList.toggle('on',on);b.setAttribute('aria-pressed',String(on))})}
+function setDetail(v){
+  if(cfg.get('detail','concise')===v)return;
+  cfg.set('detail',v);syncSeg();
+  if(chunks[chunkIdx]){cancelAll();audio.pause();buildChunks();markCurrent();loadSection(chunkIdx)}
+}
+document.querySelectorAll('#styleSeg button').forEach(b=>b.onclick=()=>setDetail(b.dataset.v));
+
 // ---------- Setup checklist ----------
 async function checkKey(){
   const key=cfg.get('key','');
@@ -748,13 +788,12 @@ $('b3').onclick=()=>{$('btnSettings').click();setTimeout(()=>$('key').focus(),50
 $('b4').onclick=()=>{if(secReady)startPlayback();else generate(chunkIdx,true)};
 
 // ---------- Settings & init ----------
-$('btnSettings').onclick=()=>{$('key').value=cfg.get('key','');$('voice').value=cfg.get('voice','Kore');$('model').value=TEXT_MODEL();$('ttsModel').value=cfg.get('ttsModel','gemini-3.8-flash-tts');$('chunkPages').value=cfg.get('chunkPages','3');$('prefetchOn').value=cfg.get('prefetch','1');$('detail').value=cfg.get('detail','concise');$('dlg').showModal()};
+$('btnSettings').onclick=()=>{$('key').value=cfg.get('key','');$('voice').value=cfg.get('voice','Kore');$('model').value=TEXT_MODEL();$('ttsModel').value=cfg.get('ttsModel','gemini-3.8-flash-tts');$('chunkPages').value=cfg.get('chunkPages','3');$('prefetchOn').value=cfg.get('prefetch','1');$('dlg').showModal()};
 $('dlg').addEventListener('close',()=>{
   if($('dlg').returnValue!=='ok')return;
   cfg.set('key',$('key').value.trim());cfg.set('voice',$('voice').value);cfg.set('textModel',$('model').value);cfg.set('ttsModel',$('ttsModel').value);SESSION_PREF.text=SESSION_PREF.tts=null;
-  cfg.set('prefetch',$('prefetchOn').value);const old=cfg.get('chunkPages','3'),oldD=cfg.get('detail','concise');cfg.set('chunkPages',$('chunkPages').value);cfg.set('detail',$('detail').value);
+  cfg.set('prefetch',$('prefetchOn').value);const old=cfg.get('chunkPages','3');cfg.set('chunkPages',$('chunkPages').value);
   if(old!==$('chunkPages').value){cancelAll();audio.pause();buildChunks();chunkIdx=0;markCurrent();loadSection(0)}
-  else if(oldD!==$('detail').value&&chunks[chunkIdx]){cancelAll();audio.pause();buildChunks();markCurrent();loadSection(chunkIdx)}
   status('Settings saved.');checkKey();
 });
 $('btnClear').onclick=async()=>{if(confirm('Delete all saved lectures and audio on this device?')){await DB.clearPrefix('script:');await DB.clearPrefix('prog:');buildChunks();status('Cleared.')}};
@@ -772,7 +811,7 @@ $('refFile').onchange=async e=>{const f=e.target.files[0];if(!f)return;status('R
   if(pdf)await alignRef(pages);else status('');
   renderSteps()};
 (async function init(){
-  setSpeed(cfg.get('speed','1'));
+  setSpeed(cfg.get('speed','1'));syncSeg();setPlayLabel();
   if(typeof pdfjsLib==='undefined'){status('PDF viewer failed to load (network).',true);return}
   try{const w=await (await fetch('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js')).text();pdfjsLib.GlobalWorkerOptions.workerSrc=URL.createObjectURL(new Blob([w],{type:'text/javascript'}))}catch(e){pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'}
   pdfName=(await DB.get('pdfname'))||'';const saved=await DB.get('pdf');if(saved){try{await loadPdfData(saved)}catch(e){status('Could not reopen the saved PDF: '+e.message,true)}}
