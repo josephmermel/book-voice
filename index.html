@@ -130,6 +130,15 @@ small.hint{color:var(--mute)}
 #progIdle,#progBg{font-size:12px;color:var(--mute)}
 .prow{display:flex;gap:8px}
 #script .empty{color:var(--mute)}
+#chunks button.queued::after{content:" ⋯";opacity:.7}
+#batchList{max-height:46vh;overflow:auto;margin:10px 0;border:1px solid var(--line);border-radius:10px}
+#batchDlg .brow{display:flex;gap:10px;align-items:center;padding:7px 10px;margin:0;color:var(--ink);font-size:14px;cursor:pointer}
+#batchDlg .brow:hover{background:var(--bg)}
+#batchDlg .brow input{width:auto;flex:none}
+#batchDlg .brow span{flex:1}
+#batchDlg .brow small{color:var(--mute)}
+#nowline .lb{flex:none;border:0;background:transparent;color:var(--acc);font-size:12px;padding:0 2px;text-decoration:underline;cursor:pointer}
+#nowline .lb:hover{border:0}
 #viewbar{display:flex;justify-content:space-between;align-items:center;padding:6px 14px;border-bottom:1px solid var(--line);background:var(--panel)}
 .seg.sm button{padding:3px 10px;font-size:12px}
 #booktext{flex:1;overflow:auto;padding:12px 18px 20px;font-size:15px;line-height:1.6;min-height:0}
@@ -196,6 +205,7 @@ small.hint{color:var(--mute)}
       <div class="crow">
         <select id="chapter" title="Chapter"></select>
         <small id="chapInfo"></small>
+        <button id="btnBatch" class="hbtn" title="Generate several sections in one go"><svg viewBox="0 0 24 24"><path d="M10 6h10M10 12h10M10 18h10"/><path d="M3.5 6.5l1.5 1.5 2.5-3M3.5 12.5l1.5 1.5 2.5-3M3.5 18.5l1.5 1.5 2.5-3"/></svg>Several…</button>
         <div class="seg" id="styleSeg" role="group" aria-label="Lecture style" title="Concise: key points only. Full: everything on the page.">
           <button type="button" data-v="concise">Concise</button><button type="button" data-v="standard">Full</button>
         </div>
@@ -266,6 +276,16 @@ small.hint{color:var(--mute)}
     </p>
   </form>
 </dialog>
+<dialog id="batchDlg">
+  <form method="dialog">
+    <h3 style="margin:0 0 2px">Generate several sections</h3>
+    <small class="hint" id="batchSub"></small>
+    <div id="batchList"></div>
+    <div style="display:flex;gap:8px"><button type="button" id="batchAll">Select all not generated</button><button type="button" id="batchNone">Clear</button></div>
+    <p class="hint" id="batchEst" style="font-size:13px;margin:10px 0 0"></p>
+    <p style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px"><button value="cancel">Close</button><button class="primary" id="batchGo" value="go">Generate</button></p>
+  </form>
+</dialog>
 <dialog id="dlg">
   <form method="dialog">
     <h3 style="margin:0 0 4px">Settings</h3>
@@ -303,8 +323,6 @@ small.hint{color:var(--mute)}
     <small class="hint">If the chosen model is busy or slow, the app tries the others automatically.</small>
     <label>Pages per section</label>
     <select id="chunkPages"><option value="2">2 pages</option><option value="3" selected>3 pages</option><option value="4">4 pages</option></select>
-    <label>Prepare the next section while one is playing</label>
-    <select id="prefetchOn"><option value="1">Yes</option><option value="0">No (uses less of your API quota)</option></select>
     <p style="display:flex;gap:8px;justify-content:space-between;margin-top:16px">
       <button type="button" id="btnClear">Clear saved lectures</button>
       <button class="primary" value="ok">Save</button>
@@ -329,7 +347,7 @@ const DB=(()=>{let p;const open=()=>p||(p=new Promise((res,rej)=>{try{const r=in
 
 // ---------- State ----------
 let DATA={chapters:[],ref:{}},pdf=null,chapIdx=0,chunkIdx=0,chunks=[],curScript=null,audio=$('audio')||new Audio(),ansAudio=new Audio();
-let curLocs=null,curHl=null,books=[],book=null,pendingRoute=null,dlgNew=false,hintSlug='',firstRunChain=false,refInfo={state:'none',name:'',msg:''},keyInfo={state:'none',msg:''},genToken=0,viewPage=0,paraFrac=[],paraTimes=[],curSegs=null,lastK=-1,syncScroll=true,autoOffset=null,prefetching=new Set(),qaHistory=[],busy=false;
+let curRec=null,locOffer=false,curLocs=null,curHl=null,books=[],book=null,pendingRoute=null,dlgNew=false,hintSlug='',firstRunChain=false,refInfo={state:'none',name:'',msg:''},keyInfo={state:'none',msg:''},genToken=0,viewPage=0,paraFrac=[],paraTimes=[],curSegs=null,lastK=-1,syncScroll=true,autoOffset=null,prefetching=new Set(),qaHistory=[],busy=false;
 audio.preservesPitch=true;ansAudio.preservesPitch=true;
 const status=(m,err)=>{$('status').textContent=m||'';$('status').className=err?'err':''};window.status_=status;
 
@@ -526,13 +544,13 @@ async function loadSection(i){
     if(curUrl)URL.revokeObjectURL(curUrl);curUrl=URL.createObjectURL(rec.audio);
     curSegs=rec.segs||null;curLocs=rec.locs||textFallbackLocs(chunks[i],rec.script);audio.src=curUrl;audio.playbackRate=parseFloat(cfg.get('speed','1'));secReady=true;status('');
   }else{
-    secReady=false;curScript=null;paraFrac=[];paraTimes=[];curSegs=null;curLocs=null;curHl=null;drawHl();setNow(null);lastK=-1;audio.removeAttribute('src');audio.load();
+    secReady=false;curRec=null;locOffer=false;curScript=null;paraFrac=[];paraTimes=[];curSegs=null;curLocs=null;curHl=null;drawHl();setNow(null);lastK=-1;audio.removeAttribute('src');audio.load();
     $('time').textContent='0:00 / 0:00';$('seek').value=0;
     if(rec&&rec.script){renderScript(rec.script);status('The lecture text is saved, but the voice is not recorded yet. Press Generate lecture to finish it.')}
     else{status('');$('script').innerHTML=`<p class="empty">Section ${secLabel(i)} has not been generated yet. Press <b>Generate lecture</b>. The first time takes a few minutes; after that it is saved on this device.</p>`}
   }
   setPlayLabel();updateButtons();renderBook();
-  if(secReady){lastK=-1;showLoc(0);if(!rec.locs)backfillLocs(i,rec)}
+  if(secReady){curRec=rec;locOffer=!rec.locs&&!!cfg.get('key','');lastK=-1;showLoc(0)}
 }
 
 // ---------- Gemini ----------
@@ -671,20 +689,15 @@ async function runJob(j){
     j.error=e.message||String(e);
   }finally{if(bgJob===j)bgJob=null;renderProg();updateButtons()}
 }
+let queue=null;
 function generate(i,autoplay){
-  if(jobActive())return;status('');
+  if(jobActive()||queue)return;status('');
   if(bgJob&&bgJob.i===i){job=bgJob;bgJob=null;job.bg=false;job.autoplay=!!autoplay;renderProg();updateButtons();return}
   cancelBg();job=makeJob(i,false,autoplay);runJob(job);renderProg();updateButtons();
 }
-async function prefetch(i){
-  if(cfg.get('prefetch','1')!=='1'||i>=chunks.length||bgJob||jobActive())return;
-  const rec=await DB.get(skey(chunks[i]));if(rec&&rec.script&&rec.audio)return;
-  if(bgJob||jobActive())return;
-  bgJob=makeJob(i,true,false);runJob(bgJob);renderProg();
-}
 function cancelBg(){if(bgJob){bgJob.ctl.cancelled=true;bgJob.ctl.ac.abort();setBusyChip(bgJob.i,false);bgJob=null}}
 function cancelJob(){if(job){job.ctl.cancelled=true;job.ctl.ac.abort();setBusyChip(job.i,false);job=null}}
-function cancelAll(){cancelJob();cancelBg();renderProg();updateButtons()}
+function cancelAll(){if(queue)queue.cancelled=true;cancelJob();cancelBg();renderProg();updateButtons()}
 function startTicker(){if(!ticker)ticker=setInterval(()=>{if(jobActive()||bgJob)renderProg();else{clearInterval(ticker);ticker=null}},500)}
 function overallPct(j){
   if(j.stage==='read')return 2+8*(j.cur/Math.max(1,j.total));
@@ -698,7 +711,7 @@ function renderProg(){
   p.hidden=false;$('progMain').hidden=false;
   const now=Date.now(),el=(now-job.t0)/1000;
   p.className=job.error?'err':'';
-  $('progTitle').textContent=job.error?`Generation failed for ${secLabel(job.i)}`:`Generating section ${secLabel(job.i)}`;
+  $('progTitle').textContent=job.error?`Generation failed for ${secLabel(job.i)}`:`Generating section ${secLabel(job.i)}${queue?` (${queue.pos+1} of ${queue.total})`:''}`;
   $('progTime').textContent=job.error?'':`${mmss(el)} elapsed`;
   const order=['read','write','voice'],idx=order.indexOf(job.stage),names=['Read pages','Write lecture','Record voice'];
   names.forEach((nm,n)=>{const e=$('s'+(n+1));e.className='stg'+(n<idx?' done':(n===idx&&!job.error)?' act':'');e.textContent=(n<idx?'✓ ':'')+nm+(n===2&&idx===2&&job.total?` ${job.cur}/${job.total}`:'')});
@@ -713,11 +726,12 @@ function renderProg(){
   $('progNote').textContent=note;
   const stepEl=(now-job.tStep)/1000,limit={read:30,write:150,voice:90}[job.stage]||90;
   $('progIdle').textContent=job.error?'':`This step: ${mmss(stepEl)}`+(job.using&&job.stage!=='read'?` · model: ${job.using}`:'')+(stepEl>limit?'. That is longer than usual. Gemini can be slow when it is busy. It keeps retrying by itself, or you can cancel and try again.':'');
-  $('btnCancel').hidden=!!job.error;$('btnRetry').hidden=!job.error;
+  $('btnCancel').hidden=!!job.error;$('btnCancel').textContent=queue?'Cancel batch':'Cancel';$('btnRetry').hidden=!job.error;
   $('progBg').textContent=bgTxt;
 }
 function updateButtons(){
-  const active=jobActive(),here=active&&job.i===chunkIdx;
+  const active=jobActive()||!!queue,here=jobActive()&&job.i===chunkIdx;
+  $('btnBatch').disabled=!pdf;
   const failedHere=job&&job.error&&job.i===chunkIdx;
   $('btnGen').hidden=secReady||here;
   $('btnGen').disabled=(active&&!here)||!pdf||!cfg.get('key','');
@@ -726,8 +740,71 @@ function updateButtons(){
   $('btnPlay').hidden=!secReady;$('script').classList.toggle('seekable',secReady);
 }
 $('btnGen').onclick=()=>generate(chunkIdx,false);
-$('btnCancel').onclick=()=>{cancelJob();renderProg();updateButtons();status('Cancelled.')};
+$('btnCancel').onclick=()=>{const had=!!queue;cancelAll();if(!had)status('Cancelled.')};
 $('btnRetry').onclick=()=>{const i=job.i,ap=job.autoplay;job=null;generate(i,ap)};
+
+// ---------- Batch: generate several sections in order ----------
+const isReady=async i=>{const r=await DB.get(skey(chunks[i]));return !!(r&&r.script&&r.audio)};
+const estPerSection=()=>(cfg.get('detail','concise')==='standard'?0.14:0.085)*(Date.now()>=Date.UTC(2027,0,1)?1.6:1);
+const guardQueue=what=>!queue||confirm(`A batch is still generating. ${what} will stop it. Continue?`);
+async function runQueue(items){
+  if(queue||jobActive()||!items.length)return;
+  const q=queue={items:items.slice(),pos:0,total:items.length,ok:0,failed:[],cancelled:false};
+  const chip=i=>document.querySelector(`#chunks button[data-i="${i}"]`);
+  items.forEach(i=>{const b=chip(i);if(b)b.classList.add('queued')});
+  status('');updateButtons();renderProg();
+  let streak=0,why='';
+  for(;q.pos<q.items.length;q.pos++){
+    if(q.cancelled)break;
+    const i=q.items[q.pos],b=chip(i);
+    if(b)b.classList.remove('queued');
+    if(await isReady(i)){q.ok++;continue}
+    job=makeJob(i,false,false);const j=job;renderProg();updateButtons();
+    await runJob(j);
+    if(q.cancelled)break;
+    if(j.error){
+      q.failed.push(i);streak++;
+      if(/\b402\b|depleted/i.test(j.error)){why='Your prepaid credits are used up.';break}
+      if(streak>=2){why='Two sections failed in a row, so the batch stopped.';break}
+    }else{q.ok++;streak=0}
+  }
+  document.querySelectorAll('#chunks button.queued').forEach(b=>b.classList.remove('queued'));
+  queue=null;
+  if(q.cancelled)status(`Batch stopped. ${q.ok} of ${q.total} sections are ready.`);
+  else status(`Batch finished: ${q.ok} of ${q.total} sections ready${q.failed.length?`; ${q.failed.length} failed (${q.failed.map(secLabel).join(', ')})`:''}.${why?' '+why:''}`,q.failed.length>0);
+  renderProg();updateButtons();
+}
+async function openBatch(){
+  if(!chunks.length||!pdf)return;
+  const ready=await Promise.all(chunks.map((c,i)=>isReady(i)));
+  const ch=DATA.chapters[chapIdx],list=$('batchList');list.innerHTML='';
+  $('batchSub').textContent=`Chapter ${ch.n}: ${ch.title}`;
+  ready.forEach((rd,i)=>{
+    const lab=document.createElement('label');lab.className='brow';
+    const cb=document.createElement('input');cb.type='checkbox';cb.dataset.i=i;cb.disabled=rd||!!queue;cb.onchange=updateBatchEst;
+    const sp=document.createElement('span');sp.textContent=`Pages ${chipText(chunks[i])}`+(i===chunkIdx?' (current)':'');
+    const st=document.createElement('small');st.textContent=rd?'✓ ready':queue&&queue.items.includes(i)?'queued':'not generated';
+    lab.append(cb,sp,st);list.appendChild(lab);
+  });
+  $('batchDlg').returnValue='';updateBatchEst();$('batchDlg').showModal();
+}
+function updateBatchEst(){
+  const n=document.querySelectorAll('#batchList input:checked').length,est=estPerSection();
+  const noKey=!cfg.get('key','');
+  $('batchEst').textContent=queue?'A batch is already running. Wait for it to finish or cancel it first.':noKey?'Add your API key in Settings first.':
+    n?`${n} section${n===1?'':'s'} selected. Rough cost: about $${(n*est).toFixed(2)} (${cfg.get('detail','concise')==='standard'?'Full':'Concise'} style, at current prices). They are generated one after another, in order, so the earliest are ready first and you can start listening while the rest continue.`:
+    'Tick the sections you want. Nothing is generated until you press Generate.';
+  $('batchGo').disabled=!n||!!queue||noKey;
+  $('batchGo').textContent=n?`Generate ${n}`:'Generate';
+}
+$('btnBatch').onclick=openBatch;
+$('batchAll').onclick=()=>{document.querySelectorAll('#batchList input:not(:disabled)').forEach(c=>c.checked=true);updateBatchEst()};
+$('batchNone').onclick=()=>{document.querySelectorAll('#batchList input').forEach(c=>c.checked=false);updateBatchEst()};
+$('batchDlg').addEventListener('close',()=>{
+  if($('batchDlg').returnValue!=='go')return;
+  const sel=[...document.querySelectorAll('#batchList input:checked')].map(x=>+x.dataset.i).sort((a,b)=>a-b);
+  runQueue(sel);
+});
 
 // ---------- Where on the page is the paragraph? ----------
 const LOC_SCHEMA={type:'ARRAY',items:{type:'OBJECT',properties:{p:{type:'INTEGER'},image:{type:'INTEGER'},box:{type:'ARRAY',items:{type:'INTEGER'}},starts:{type:'STRING'}},required:['p','image','box','starts']}};
@@ -757,17 +834,19 @@ Lecture paragraphs:
   });
   return out.some(Boolean)?out:null;
 }
-async function backfillLocs(i,rec){
-  const k=skey(chunks[i]);if(!cfg.get('key','')||!pdf)return;const lt=locTried.get(k);if(lt&&Date.now()-lt<600000)return;locTried.set(k,Date.now());
+async function backfillLocs(i,rec,force){
+  const k=skey(chunks[i]);if(!cfg.get('key','')||!pdf)return;
+  const lt=locTried.get(k);if(!force&&lt&&Date.now()-lt<600000)return;locTried.set(k,Date.now());
   const chunk=chunks[i],myBook=book;
   try{
     status('Marking where each paragraph is on the page…');
     const locs=await locateParas(chunk,rec.script,null);
-    if(!locs||book!==myBook){status('');return}
+    if(book!==myBook){status('');return}
+    if(!locs){status('Could not find exact positions this time. You can try again.',true);return}
     rec.locs=locs;await DB.set(k,rec);
-    if(chunkIdx===i){curLocs=locs;lastK=-1;showLoc(Math.max(0,curParaIndex()))}
-  }catch(e){}
-  status('');
+    if(chunkIdx===i){curLocs=locs;locOffer=false;lastK=-1;showLoc(Math.max(0,curParaIndex()))}
+    status('');
+  }catch(e){status('Could not find exact positions: '+(e.message||e),true)}
 }
 const STOP=new Set('that this with from have which their there about would could these those where when then than into also only such each other more most some very what been were will your they them its not but and the for are was can has had one two may must should because while between through under over after before again both does did being same just like make made'.split(' '));
 const wordset=t=>new Set((t.toLowerCase().match(/[a-z]{4,}/g)||[]).filter(w=>!STOP.has(w)));
@@ -787,14 +866,20 @@ function textFallbackLocs(chunk,script){
   });
   return any?out:null;
 }
+function locBtn(){
+  const b=document.createElement('button');b.type='button';b.className='lb';b.textContent='Find exact spots';
+  b.title='Ask Gemini to mark where each paragraph is on the page (costs about one cent)';
+  b.onclick=()=>{if(curRec)backfillLocs(chunkIdx,curRec,true)};return b;
+}
 function setNow(loc,page){
-  const el=$('nowline');if(!loc){el.hidden=true;el.innerHTML='';return}
+  const el=$('nowline');el.innerHTML='';
+  if(!loc){if(locOffer){el.appendChild(locBtn());el.hidden=false}else el.hidden=true;return}
   let where='';
   if(loc.box){const [y0,x0,y1,x1]=loc.box,cy=(y0+y1)/2,cx=(x0+x1)/2;where=cy<333?'top':cy<667?'middle':'bottom';if(x1-x0<600)where+=cx<400?' left':cx>600?' right':''}
   const bp=bookPageOf(page);
-  el.innerHTML='';
   if(loc.starts){const q=document.createElement('span');q.className='q';q.textContent=`“${loc.starts}${/[.…)]$/.test(loc.starts)||loc.starts.split(/\s+/).length<4?'':'…'}”`;el.appendChild(q)}
   const w=document.createElement('span');w.className='w';w.textContent=`${bp?'page '+bp:'PDF '+page}${where?' · '+where:''}${loc.guess?' · best guess':''}`;el.appendChild(w);
+  if(locOffer)el.appendChild(locBtn());
   el.hidden=false;
 }
 function showLoc(k){
@@ -878,7 +963,7 @@ async function startPlayback(){
   if(!secReady)return;
   if(!ansAudio.paused)ansAudio.pause();
   try{await audio.play()}catch(e){status('Press Play to start.');return}
-  status('');saveProgress();prefetch(chunkIdx+1);
+  status('');saveProgress();
 }
 audio.addEventListener('timeupdate',()=>{
   const d=audio.duration||0,t=audio.currentTime;$('time').textContent=fmt(t)+' / '+fmt(d);
@@ -892,7 +977,7 @@ audio.addEventListener('play',setPlayLabel);audio.addEventListener('pause',setPl
 audio.addEventListener('loadedmetadata',()=>{$('time').textContent='0:00 / '+fmt(audio.duration);computeParaTimes()});
 audio.addEventListener('ended',async()=>{setPlayLabel();
   DB.set(skey(chunks[chunkIdx]).replace('script:','prog:'),1);
-  if(chunkIdx+1<chunks.length){await selectChunk(chunkIdx+1);if(secReady)startPlayback();else generate(chunkIdx,true)}
+  if(chunkIdx+1<chunks.length){await selectChunk(chunkIdx+1);if(secReady)startPlayback();else status('The next section is not generated yet. Press Generate lecture when you want it.')}
   else status('Chapter finished. Pick the next chapter when ready.')});
 $('seek').oninput=()=>{if(audio.duration)audio.currentTime=audio.duration*$('seek').value/1000};
 $('btnPlay').onclick=async()=>{
@@ -1017,6 +1102,7 @@ document.querySelectorAll('#viewSeg button').forEach(b=>b.onclick=()=>setView(b.
 function syncSeg(){const v=cfg.get('detail','concise');document.querySelectorAll('#styleSeg button').forEach(b=>{const on=b.dataset.v===v;b.classList.toggle('on',on);b.setAttribute('aria-pressed',String(on))})}
 function setDetail(v){
   if(cfg.get('detail','concise')===v)return;
+  if(!guardQueue('Changing the lecture style')){syncSeg();return}
   cfg.set('detail',v);syncSeg();
   if(chunks[chunkIdx]){cancelAll();audio.pause();buildChunks();markCurrent();loadSection(chunkIdx)}
 }
@@ -1090,7 +1176,7 @@ $('btnDelBook').onclick=async()=>{
 $('bookSel').onchange=e=>{
   const v=e.target.value;
   if(v==='__new'){e.target.value=book?book.id:'';openBookDialog(true);return}
-  if(v&&(!book||v!==book.id))openBook(v);
+  if(v&&(!book||v!==book.id)){if(!guardQueue('Switching book')){e.target.value=book?book.id:'';return}openBook(v)}
 };
 function setFollow(on){
   $('follow').checked=on;const b=$('btnFollow');b.classList.toggle('on',on);b.setAttribute('aria-pressed',String(on));
@@ -1102,11 +1188,11 @@ $('btnFollow').onclick=()=>{
 };
 
 // ---------- Settings & init ----------
-$('btnSettings').onclick=()=>{$('key').value=cfg.get('key','');$('voice').value=cfg.get('voice','Kore');$('model').value=TEXT_MODEL();$('ttsModel').value=cfg.get('ttsModel','gemini-3.8-flash-tts');$('chunkPages').value=cfg.get('chunkPages','3');$('prefetchOn').value=cfg.get('prefetch','1');renderSteps();$('dlg').showModal()};
+$('btnSettings').onclick=()=>{$('key').value=cfg.get('key','');$('voice').value=cfg.get('voice','Kore');$('model').value=TEXT_MODEL();$('ttsModel').value=cfg.get('ttsModel','gemini-3.8-flash-tts');$('chunkPages').value=cfg.get('chunkPages','3');renderSteps();$('dlg').showModal()};
 $('dlg').addEventListener('close',()=>{
   if($('dlg').returnValue==='ok'){
     cfg.set('key',$('key').value.trim());cfg.set('voice',$('voice').value);cfg.set('textModel',$('model').value);cfg.set('ttsModel',$('ttsModel').value);SESSION_PREF.text=SESSION_PREF.tts=null;
-    cfg.set('prefetch',$('prefetchOn').value);const old=cfg.get('chunkPages','3');cfg.set('chunkPages',$('chunkPages').value);
+    const old=cfg.get('chunkPages','3');cfg.set('chunkPages',$('chunkPages').value);
     if(old!==$('chunkPages').value&&chunks[chunkIdx]){cancelAll();audio.pause();buildChunks();chunkIdx=0;markCurrent();loadSection(0)}
     status('Settings saved.');checkKey();
   }
@@ -1127,7 +1213,7 @@ $('pdfFile').onchange=async e=>{
 };
 $('pPrev').onclick=()=>{setFollow(false);showPage(viewPage-1)};
 $('pNext').onclick=()=>{setFollow(false);showPage(viewPage+1)};
-$('chapter').onchange=async e=>{if(!DATA.chapters.length)return;cancelAll();audio.pause();chapIdx=+e.target.value;chunkIdx=0;buildChunks();markCurrent();saveProgress();if(pdf)showPage(DATA.chapters[chapIdx].start);await loadSection(0)};
+$('chapter').onchange=async e=>{if(!DATA.chapters.length)return;if(!guardQueue('Switching chapter')){e.target.value=chapIdx;return}cancelAll();audio.pause();chapIdx=+e.target.value;chunkIdx=0;buildChunks();markCurrent();saveProgress();if(pdf)showPage(DATA.chapters[chapIdx].start);await loadSection(0)};
 
 $('refFile').onchange=async e=>{
   const f=e.target.files[0];e.target.value='';if(!f||!book||dlgNew)return;

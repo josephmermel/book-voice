@@ -9,6 +9,9 @@ Everything runs in your browser. There is no server. Your books, saved lectures 
 1. **Settings** (the sliders icon, top right): paste your Gemini API key. Create one at https://aistudio.google.com/apikey. This is the only general setup.
 2. **Book setup**: add a book. Choose the PDF; chapters come from its outline. Optionally add the book's **DjVu XML** file from its archive.org page (Download options). It gives cleaner text than a scanned PDF, lets the app show printed page numbers, and powers the **Book text** view.
 3. Pick a chapter and a section, then press **Generate lecture**. The first time takes a few minutes; it is then saved on your device.
+4. To prepare several sections at once, press **Several…**, tick the sections you want, and press Generate. They are generated one after another, in order, and each shows as ready as it finishes, so you can start listening while the rest continue.
+
+The app never spends anything on its own: it does not generate the next section automatically, and it does not look up paragraph positions for old lectures unless you press **Find exact spots**.
 
 You can keep several books. Use the dropdown in the header to switch, or **＋ New book…** to add another. Each book keeps its own PDF, text, saved lectures and place.
 
