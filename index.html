@@ -183,10 +183,27 @@ small.hint{color:var(--mute)}
     <input type="password" id="key" autocomplete="off" placeholder="AIza… or AQ.…">
     <label>Voice</label>
     <select id="voice"></select>
-    <label>Lecture model</label>
-    <input type="text" id="model" value="gemini-flash-latest">
+    <label>Lecture model (writes the lecture and answers questions)</label>
+    <select id="model">
+      <option value="gemini-4-hydrogen">Gemini 4 Hydrogen — most thorough (recommended)</option>
+      <option value="gemini-3.6-flash">Gemini 3.6 Flash — fast</option>
+      <option value="gemini-3.5-flash">Gemini 3.5 Flash — fast</option>
+      <option value="gemini-3.8-flash">Gemini 3.8 Flash</option>
+      <option value="gemini-3.7-flash">Gemini 3.7 Flash</option>
+      <option value="gemini-4-carbon">Gemini 4 Carbon (may need a paid plan)</option>
+      <option value="gemini-4-argon">Gemini 4 Argon (may need a paid plan)</option>
+      <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+      <option value="gemini-flash-latest">Gemini Flash (latest alias)</option>
+    </select>
     <label>Voice model</label>
-    <input type="text" id="ttsModel" value="gemini-3.8-flash-tts">
+    <select id="ttsModel">
+      <option value="gemini-3.8-flash-tts">Gemini 3.8 Flash TTS (recommended)</option>
+      <option value="gemini-3.8-flash-lite-tts">Gemini 3.8 Flash Lite TTS — faster</option>
+      <option value="gemini-3.1-flash-tts-preview">Gemini 3.1 Flash TTS (preview)</option>
+      <option value="gemini-2.5-flash-preview-tts">Gemini 2.5 Flash TTS (preview)</option>
+      <option value="gemini-2.5-pro-preview-tts">Gemini 2.5 Pro TTS (preview)</option>
+    </select>
+    <small class="hint">If the chosen model is busy or slow, the app tries the others automatically.</small>
     <label>Pages per section</label>
     <select id="chunkPages"><option value="2">2 pages</option><option value="3" selected>3 pages</option><option value="4">4 pages</option></select>
     <label>Prepare the next section while one is playing</label>
@@ -319,22 +336,31 @@ async function loadSection(i){
 }
 
 // ---------- Gemini ----------
-const FALLBACK_TEXT=['gemini-3.8-flash','gemini-3.5-flash','gemini-flash-latest'];
-const FALLBACK_TTS=['gemini-3.8-flash-tts','gemini-3.1-flash-tts-preview','gemini-2.5-flash-preview-tts','gemini-3.8-flash-lite-tts'];
+const TEXT_MODEL=()=>cfg.get('textModel','gemini-4-hydrogen');
+const FALLBACK_TEXT=['gemini-4-hydrogen','gemini-3.6-flash','gemini-3.5-flash','gemini-3.8-flash','gemini-3.7-flash','gemini-flash-latest'];
+const MODEL_TIMEOUT_MS=120000;
+const SESSION_PREF={text:null,tts:null};
+const FALLBACK_TTS=['gemini-3.8-flash-tts','gemini-3.1-flash-tts-preview','gemini-2.5-flash-preview-tts','gemini-3.8-flash-lite-tts','gemini-2.5-pro-preview-tts'];
 async function gem(model,body,rounds=4,ctl=null){
   const key=cfg.get('key','');if(!key)throw new Error('Add your Gemini API key in Settings first.');
   const pool=FALLBACK_TTS.includes(model)||/tts/.test(model)?FALLBACK_TTS:FALLBACK_TEXT;
-  const models=[model].concat(pool.filter(m=>m!==model));
+  const kind=pool===FALLBACK_TTS?'tts':'text';
+  const first=SESSION_PREF[kind]||model;
+  const models=[first].concat([model].concat(pool).filter((m,ix,arr)=>m!==first&&arr.indexOf(m)===ix));
   let last;
   for(let a=0;a<rounds;a++){
     for(let k=0;k<models.length;k++){
       const m=models[k];chk(ctl);
       let r;
-      try{r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`,{method:'POST',signal:ctl?ctl.ac.signal:undefined,headers:{'Content-Type':'application/json','x-goog-api-key':key},body:JSON.stringify(body)})}
-      catch(e){chk(ctl);last=e;continue}
-      if(r.ok)return r.json();
+      if(ctl&&ctl.using)ctl.using(m);
+      const to=new AbortController(),tm=setTimeout(()=>to.abort(),MODEL_TIMEOUT_MS),onAb=()=>to.abort();
+      if(ctl)ctl.ac.signal.addEventListener('abort',onAb,{once:true});
+      try{r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`,{method:'POST',signal:to.signal,headers:{'Content-Type':'application/json','x-goog-api-key':key},body:JSON.stringify(body)})}
+      catch(e){clearTimeout(tm);chk(ctl);const slow=to.signal.aborted;const why=slow?`did not answer within ${MODEL_TIMEOUT_MS/1000} seconds`:'could not be reached (it is probably overloaded)';last=new Error(`${m} ${why}`);if(ctl)ctl.note(`${m} ${why}. Trying another model…`);continue}
+      clearTimeout(tm);if(ctl)ctl.ac.signal.removeEventListener('abort',onAb);
+      if(r.ok){SESSION_PREF[kind]=m;return r.json()}
       const t=await r.text();last=new Error(`Gemini ${r.status}: ${t.slice(0,200)}`);
-      if([429,500,502,503,504,404].includes(r.status)){if(ctl)ctl.note(`${m} is busy (error ${r.status}). Trying another model… (round ${a+1} of ${rounds})`);continue}
+      if([429,500,502,503,504,404].includes(r.status)){if(ctl)ctl.note(`${m} is busy or out of quota (error ${r.status}). Trying another model… (round ${a+1} of ${rounds})`);continue}
       throw last;
     }
     if(ctl)ctl.note(`All models are busy. Waiting ${Math.round(2.5*(a+1))} seconds, then retrying… (round ${a+1} of ${rounds})`);
@@ -361,7 +387,7 @@ async function makeScript(ch,chunk,prevTail,ctl){
   let tries=0,extra='';
   while(tries<3){
     ctl.stage('write');
-    const r=await gem(cfg.get('model','gemini-flash-latest'),{contents:[{parts:parts.concat(extra?[{text:extra}]:[])}],generationConfig:{maxOutputTokens:8192,temperature:0.7}},4,ctl);
+    const r=await gem(TEXT_MODEL(),{contents:[{parts:parts.concat(extra?[{text:extra}]:[])}],generationConfig:{maxOutputTokens:8192,temperature:0.7}},4,ctl);
     const t=textOf(r);if(t&&t.length>200)return t;
     const fr=r.candidates&&r.candidates[0]&&r.candidates[0].finishReason;
     tries++;extra=`(Retry: the previous attempt was blocked as too close to the source. Explain the ideas conceptually and loosely paraphrased, as if teaching at a whiteboard, with the equations stated in words.)`;
@@ -424,6 +450,7 @@ function makeJob(i,bg,autoplay){
   j.ctl.stage=(st,cur,total)=>{if(j.stage!==st)j.tStage=Date.now();j.stage=st;j.cur=cur||0;j.total=total||0;j.tStep=Date.now();j.note='';
     j.text=st==='read'?'reading pages…':st==='write'?'writing the lecture…':`recording voice ${cur}/${total}…`;renderProg()};
   j.ctl.note=m=>{j.note=m;renderProg()};
+  j.ctl.using=m=>{j.using=m};
   j.ctl.script=t=>{if(!j.bg&&chunkIdx===j.i){curScript=t;renderScript(t)}};
   setBusyChip(i,true);startTicker();return j;
 }
@@ -481,7 +508,7 @@ function renderProg(){
   else note=`Recording voice part ${job.cur} of ${job.total}. Each part takes about 15 to 40 seconds.`;
   $('progNote').textContent=note;
   const stepEl=(now-job.tStep)/1000,limit={read:30,write:150,voice:90}[job.stage]||90;
-  $('progIdle').textContent=job.error?'':`This step: ${mmss(stepEl)}`+(stepEl>limit?'. That is longer than usual. Gemini can be slow when it is busy. It keeps retrying by itself, or you can cancel and try again.':'');
+  $('progIdle').textContent=job.error?'':`This step: ${mmss(stepEl)}`+(job.using&&job.stage!=='read'?` · model: ${job.using}`:'')+(stepEl>limit?'. That is longer than usual. Gemini can be slow when it is busy. It keeps retrying by itself, or you can cancel and try again.':'');
   $('btnCancel').hidden=!!job.error;$('btnRetry').hidden=!job.error;
   $('progBg').textContent=bgTxt;
 }
@@ -573,7 +600,7 @@ async function ask(question,mode){
     const task=mode==='recap'?'Give a concise recap (about 6 to 8 sentences) of what has been covered so far in this lecture, highlighting key definitions and equations in words, and finish with what the student should be ready to hear next.':question;
     const hist=qaHistory.slice(-4).map(h=>`Student: ${h.q}\nInstructor: ${h.a}`).join('\n\n');
     const parts=[{text:`${sys}\n\nLecture heard so far:\n"""\n${heard}\n"""\n\n${hist?'Earlier questions this session:\n'+hist+'\n\n':''}${mode==='recap'?'Task':'Student question'}: ${task}`}].concat(imgs.map(d=>({inline_data:{mime_type:'image/jpeg',data:d}})));
-    const r=await gem(cfg.get('model','gemini-flash-latest'),{contents:[{parts}],generationConfig:{maxOutputTokens:2048}});
+    const r=await gem(TEXT_MODEL(),{contents:[{parts}],generationConfig:{maxOutputTokens:2048}});
     const ans=textOf(r)||'(No answer returned.)';out.textContent=ans;qaHistory.push({q:label,a:ans});
     await speak(ans);
   }catch(e){out.textContent=e.message;out.style.color='var(--err)'}
@@ -641,10 +668,10 @@ $('b3').onclick=()=>{$('btnSettings').click();setTimeout(()=>$('key').focus(),50
 $('b4').onclick=()=>{if(secReady)startPlayback();else generate(chunkIdx,true)};
 
 // ---------- Settings & init ----------
-$('btnSettings').onclick=()=>{$('key').value=cfg.get('key','');$('voice').value=cfg.get('voice','Kore');$('model').value=cfg.get('model','gemini-flash-latest');$('ttsModel').value=cfg.get('ttsModel','gemini-3.8-flash-tts');$('chunkPages').value=cfg.get('chunkPages','3');$('prefetchOn').value=cfg.get('prefetch','1');$('dlg').showModal()};
+$('btnSettings').onclick=()=>{$('key').value=cfg.get('key','');$('voice').value=cfg.get('voice','Kore');$('model').value=TEXT_MODEL();$('ttsModel').value=cfg.get('ttsModel','gemini-3.8-flash-tts');$('chunkPages').value=cfg.get('chunkPages','3');$('prefetchOn').value=cfg.get('prefetch','1');$('dlg').showModal()};
 $('dlg').addEventListener('close',()=>{
   if($('dlg').returnValue!=='ok')return;
-  cfg.set('key',$('key').value.trim());cfg.set('voice',$('voice').value);cfg.set('model',$('model').value.trim());cfg.set('ttsModel',$('ttsModel').value.trim());
+  cfg.set('key',$('key').value.trim());cfg.set('voice',$('voice').value);cfg.set('textModel',$('model').value);cfg.set('ttsModel',$('ttsModel').value);SESSION_PREF.text=SESSION_PREF.tts=null;
   cfg.set('prefetch',$('prefetchOn').value);const old=cfg.get('chunkPages','3');cfg.set('chunkPages',$('chunkPages').value);if(old!==$('chunkPages').value){cancelAll();audio.pause();buildChunks();chunkIdx=0;markCurrent();loadSection(0)}
   status('Settings saved.');checkKey();
 });
