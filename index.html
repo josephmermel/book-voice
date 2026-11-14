@@ -53,7 +53,13 @@ body.dragging{user-select:none;cursor:col-resize}
 #left{border-right:1px solid var(--line)}
 .bar{display:flex;gap:8px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line);background:var(--panel);flex-wrap:wrap}
 #pdfwrap{flex:1;overflow:auto;padding:12px;text-align:center}
-#pdfwrap canvas{max-width:100%;height:auto;box-shadow:0 1px 6px rgba(0,0,0,.2);background:#fff}
+#pdfwrap{position:relative}
+#pagebox{position:relative;display:inline-block;max-width:100%;line-height:0;box-shadow:0 1px 6px rgba(0,0,0,.2)}
+#pdfwrap canvas{display:block;max-width:100%;height:auto;background:#fff}
+#hl{position:absolute;pointer-events:none;background:rgba(255,196,0,.26);outline:2px solid rgba(224,140,0,.95);border-radius:3px;mix-blend-mode:multiply;transition:top .35s ease,left .35s ease,width .35s ease,height .35s ease}
+#nowline{padding:5px 12px;border-top:1px solid var(--line);background:var(--acc2);font-size:12.5px;line-height:1.35;color:var(--ink);display:flex;gap:8px;align-items:baseline;min-width:0}
+#nowline .q{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-style:italic}
+#nowline .w{flex:none;color:var(--mute);font-size:12px}
 #empty{padding:40px 24px;max-width:460px;margin:auto;text-align:center;color:var(--mute)}
 #right{overflow:hidden}
 #ctl{display:flex;flex-direction:column;gap:8px;padding:10px 14px 8px;background:var(--panel);border-bottom:1px solid var(--line)}
@@ -175,6 +181,7 @@ small.hint{color:var(--mute)}
         <p><button class="primary" id="btnPdf2">Book setup…</button></p>
       </div>
     </div>
+    <div id="nowline" hidden></div>
     <div id="pbar">
       <button id="pPrev" class="ib sm" title="Previous page" aria-label="Previous page"><svg viewBox="0 0 24 24"><polyline points="15 6 9 12 15 18"/></svg></button>
       <span id="pLabel">No page</span>
@@ -322,7 +329,7 @@ const DB=(()=>{let p;const open=()=>p||(p=new Promise((res,rej)=>{try{const r=in
 
 // ---------- State ----------
 let DATA={chapters:[],ref:{}},pdf=null,chapIdx=0,chunkIdx=0,chunks=[],curScript=null,audio=$('audio')||new Audio(),ansAudio=new Audio();
-let books=[],book=null,pendingRoute=null,dlgNew=false,hintSlug='',firstRunChain=false,refInfo={state:'none',name:'',msg:''},keyInfo={state:'none',msg:''},genToken=0,viewPage=0,paraFrac=[],paraTimes=[],curSegs=null,lastK=-1,syncScroll=true,autoOffset=null,prefetching=new Set(),qaHistory=[],busy=false;
+let curLocs=null,curHl=null,books=[],book=null,pendingRoute=null,dlgNew=false,hintSlug='',firstRunChain=false,refInfo={state:'none',name:'',msg:''},keyInfo={state:'none',msg:''},genToken=0,viewPage=0,paraFrac=[],paraTimes=[],curSegs=null,lastK=-1,syncScroll=true,autoOffset=null,prefetching=new Set(),qaHistory=[],busy=false;
 audio.preservesPitch=true;ansAudio.preservesPitch=true;
 const status=(m,err)=>{$('status').textContent=m||'';$('status').className=err?'err':''};window.status_=status;
 
@@ -360,7 +367,7 @@ function resetPanes(msg){
 async function openBook(id,opts={}){
   cancelAll();audio.pause();audio.removeAttribute('src');secReady=false;curScript=null;
   pdf=null;DATA={chapters:[],ref:{}};autoOffset=null;refInfo={state:'none',name:'',msg:''};chunks=[];viewPage=0;paraFrac=[];paraTimes=[];curSegs=null;chapIdx=0;chunkIdx=0;
-  const cv=$('pdfwrap').querySelector('canvas');if(cv)cv.remove();$('empty').style.display='';
+  const pbx=$('pagebox');if(pbx)pbx.remove();$('empty').style.display='';curLocs=null;curHl=null;setNow(null);
   $('chapter').innerHTML='';$('chunks').innerHTML='';$('pLabel').textContent='No page';status('');
   book=books.find(b=>b.id===id)||null;
   document.title=book?`${book.name} · Book Voice`:'Book Voice';
@@ -463,11 +470,12 @@ async function showPage(n){
   const page=await pdf.getPage(n);const wrap=$('pdfwrap');
   const base=page.getViewport({scale:1});const w=Math.max(300,wrap.clientWidth-24);
   const vp=page.getViewport({scale:Math.min(2.2,(w/base.width))*(window.devicePixelRatio>1?1.5:1.2)});
-  let c=wrap.querySelector('canvas');if(!c){c=document.createElement('canvas');wrap.appendChild(c)}
+  let pb=$('pagebox');if(!pb){pb=document.createElement('div');pb.id='pagebox';const cv=document.createElement('canvas'),hl=document.createElement('div');hl.id='hl';hl.hidden=true;pb.append(cv,hl);wrap.appendChild(pb)}
+  const c=pb.querySelector('canvas');
   if(renderTask)try{renderTask.cancel()}catch(e){}
   c.width=vp.width;c.height=vp.height;renderTask=page.render({canvasContext:c.getContext('2d'),viewport:vp});
   try{await renderTask.promise}catch(e){}
-  wrap.scrollTop=0;
+  wrap.scrollTop=0;drawHl();scrollToHl();
 }
 async function pageImage(n){ // JPEG base64 for Gemini
   const page=await pdf.getPage(n);const vp=page.getViewport({scale:1.6});
@@ -516,14 +524,15 @@ async function loadSection(i){
   if(rec&&rec.script&&rec.audio){
     curScript=rec.script;renderScript(rec.script);
     if(curUrl)URL.revokeObjectURL(curUrl);curUrl=URL.createObjectURL(rec.audio);
-    curSegs=rec.segs||null;audio.src=curUrl;audio.playbackRate=parseFloat(cfg.get('speed','1'));secReady=true;status('');
+    curSegs=rec.segs||null;curLocs=rec.locs||textFallbackLocs(chunks[i],rec.script);audio.src=curUrl;audio.playbackRate=parseFloat(cfg.get('speed','1'));secReady=true;status('');
   }else{
-    secReady=false;curScript=null;paraFrac=[];paraTimes=[];curSegs=null;lastK=-1;audio.removeAttribute('src');audio.load();
+    secReady=false;curScript=null;paraFrac=[];paraTimes=[];curSegs=null;curLocs=null;curHl=null;drawHl();setNow(null);lastK=-1;audio.removeAttribute('src');audio.load();
     $('time').textContent='0:00 / 0:00';$('seek').value=0;
     if(rec&&rec.script){renderScript(rec.script);status('The lecture text is saved, but the voice is not recorded yet. Press Generate lecture to finish it.')}
     else{status('');$('script').innerHTML=`<p class="empty">Section ${secLabel(i)} has not been generated yet. Press <b>Generate lecture</b>. The first time takes a few minutes; after that it is saved on this device.</p>`}
   }
   setPlayLabel();updateButtons();renderBook();
+  if(secReady){lastK=-1;showLoc(0);if(!rec.locs)backfillLocs(i,rec)}
 }
 
 // ---------- Gemini ----------
@@ -625,9 +634,10 @@ async function ensureChunk(i,ctl){
   if(i>0){const pr=await DB.get(skey(chunks[i-1]));if(pr&&pr.script)prevTail=pr.script.slice(-500)}
   if(!rec||!rec.script){rec={script:await makeScript(ch,chunk,prevTail,ctl)};chk(ctl);await DB.set(key,rec)}
   ctl.script(rec.script);
+  const locP=rec.locs?Promise.resolve(rec.locs):locateParas(chunk,rec.script,ctl).catch(()=>null);
   const segs=splitSegments(rec.script);const pcm=[];
   for(let s=0;s<segs.length;s++){chk(ctl);ctl.stage('voice',s+1,segs.length);pcm.push(await tts(segs[s],ctl))}
-  chk(ctl);rec.segs=segs.map((t,k)=>({chars:t.replace(/\s+/g,' ').length,sec:pcm[k].length/48000}));rec.audio=pcmToWav(pcm);await DB.set(key,rec);
+  chk(ctl);{ctl.note('Marking where each paragraph is on the page…');const lc=await locP;if(lc)rec.locs=lc}rec.segs=segs.map((t,k)=>({chars:t.replace(/\s+/g,' ').length,sec:pcm[k].length/48000}));rec.audio=pcmToWav(pcm);await DB.set(key,rec);
   return rec;
 }
 
@@ -719,6 +729,95 @@ $('btnGen').onclick=()=>generate(chunkIdx,false);
 $('btnCancel').onclick=()=>{cancelJob();renderProg();updateButtons();status('Cancelled.')};
 $('btnRetry').onclick=()=>{const i=job.i,ap=job.autoplay;job=null;generate(i,ap)};
 
+// ---------- Where on the page is the paragraph? ----------
+const LOC_SCHEMA={type:'ARRAY',items:{type:'OBJECT',properties:{p:{type:'INTEGER'},image:{type:'INTEGER'},box:{type:'ARRAY',items:{type:'INTEGER'}},starts:{type:'STRING'}},required:['p','image','box','starts']}};
+const locTried=new Map();
+async function locateParas(chunk,script,parent){
+  const paras=script.split(/\n\s*\n/).map(x=>x.trim()).filter(Boolean);if(!paras.length)return null;
+  const ctl=parent?Object.assign(Object.create(parent),{kind:'loc',pool:QA_POOL,timeoutMs:150000,note(){},using(){}}):{cancelled:false,ac:new AbortController(),kind:'loc',pool:QA_POOL,timeoutMs:150000,note(){},using(){}};
+  const imgs=[];for(const p of chunk.pages){chk(ctl);imgs.push(await pageImage(p))}
+  const n=chunk.pages.length;
+  const prompt=`You are given textbook page images (Image 1 to Image ${n}, in order) and the numbered paragraphs of a spoken lecture that explains those pages in order.
+For EACH lecture paragraph, locate the main place on the page images that the paragraph is explaining. Return: the image number; a tight bounding box [ymin, xmin, ymax, xmax] with coordinates normalized to 0-1000 (0,0 is the top-left of that image) around the passage, figure or equation being explained; and "starts", the first 6 to 10 words of that source passage exactly as printed on the page (for a figure or an equation give its printed label, for example "FIG. 2.6" or "(2.1)"). If a paragraph covers several places, box the first one. Return exactly one entry per paragraph, in order, with "p" set to the paragraph number.
+
+Lecture paragraphs:
+`+paras.map((t,i)=>`${i+1}. ${t}`).join('\n');
+  const parts=[{text:prompt}];
+  imgs.forEach((d,k)=>{const bp=bookPageOf(chunk.pages[k]);parts.push({text:`Image ${k+1}${bp?` (book page ${bp})`:''}:`});parts.push({inline_data:{mime_type:'image/jpeg',data:d}})});
+  const r=await gem(QA_POOL[0],{contents:[{parts}],generationConfig:{responseMimeType:'application/json',responseSchema:LOC_SCHEMA,maxOutputTokens:32000}},2,ctl);
+  const txt=((r.candidates&&r.candidates[0]&&r.candidates[0].content&&r.candidates[0].content.parts)||[]).filter(p=>!p.thought).map(p=>p.text||'').join('');
+  let arr;try{arr=JSON.parse(txt)}catch(e){return null}
+  if(!Array.isArray(arr))return null;
+  const out=paras.map(()=>null),clamp=v=>Math.max(0,Math.min(1000,v));
+  arr.forEach(o=>{
+    const i=(o&&o.p)-1;if(!(i>=0&&i<paras.length)||!Array.isArray(o.box)||o.box.length!==4||o.box.some(v=>typeof v!=='number'))return;
+    let [y0,x0,y1,x1]=o.box.map(clamp);if(y1<=y0||x1<=x0)return;
+    y0=clamp(y0-6);x0=clamp(x0-8);y1=clamp(y1+6);x1=clamp(x1+8);
+    out[i]={image:Math.max(1,Math.min(n,o.image|0||1)),box:[y0,x0,y1,x1],starts:String(o.starts||'').trim()};
+  });
+  return out.some(Boolean)?out:null;
+}
+async function backfillLocs(i,rec){
+  const k=skey(chunks[i]);if(!cfg.get('key','')||!pdf)return;const lt=locTried.get(k);if(lt&&Date.now()-lt<600000)return;locTried.set(k,Date.now());
+  const chunk=chunks[i],myBook=book;
+  try{
+    status('Marking where each paragraph is on the page…');
+    const locs=await locateParas(chunk,rec.script,null);
+    if(!locs||book!==myBook){status('');return}
+    rec.locs=locs;await DB.set(k,rec);
+    if(chunkIdx===i){curLocs=locs;lastK=-1;showLoc(Math.max(0,curParaIndex()))}
+  }catch(e){}
+  status('');
+}
+const STOP=new Set('that this with from have which their there about would could these those where when then than into also only such each other more most some very what been were will your they them its not but and the for are was can has had one two may must should because while between through under over after before again both does did being same just like make made'.split(' '));
+const wordset=t=>new Set((t.toLowerCase().match(/[a-z]{4,}/g)||[]).filter(w=>!STOP.has(w)));
+function textFallbackLocs(chunk,script){
+  if(!chunk||!script)return null;
+  const paras=script.split(/\n\s*\n/).map(x=>x.trim()).filter(Boolean);
+  const cand=[];chunk.pages.forEach((p,pi)=>{(DATA.ref[p]||'').split(/\n\s*\n/).map(x=>x.trim()).filter(x=>x.length>60).forEach(x=>cand.push({pi,text:x,w:wordset(x)}))});
+  if(!cand.length)return null;
+  const df={};cand.forEach(c=>c.w.forEach(w=>df[w]=(df[w]||0)+1));
+  let last=0;let any=false;
+  const out=paras.map(par=>{
+    const w=wordset(par);let best=-1,bs=0;
+    for(let j=Math.max(0,last-1);j<cand.length;j++){let sc=0;cand[j].w.forEach(x=>{if(w.has(x))sc+=1/df[x]});sc/=Math.sqrt(cand[j].w.size||1);if(sc>bs){bs=sc;best=j}}
+    if(best<0||bs<0.2)return null;
+    last=best;any=true;const c=cand[best];
+    return {image:c.pi+1,box:null,starts:c.text.split(/\s+/).slice(0,9).join(' '),guess:true};
+  });
+  return any?out:null;
+}
+function setNow(loc,page){
+  const el=$('nowline');if(!loc){el.hidden=true;el.innerHTML='';return}
+  let where='';
+  if(loc.box){const [y0,x0,y1,x1]=loc.box,cy=(y0+y1)/2,cx=(x0+x1)/2;where=cy<333?'top':cy<667?'middle':'bottom';if(x1-x0<600)where+=cx<400?' left':cx>600?' right':''}
+  const bp=bookPageOf(page);
+  el.innerHTML='';
+  if(loc.starts){const q=document.createElement('span');q.className='q';q.textContent=`“${loc.starts}${/[.…)]$/.test(loc.starts)||loc.starts.split(/\s+/).length<4?'':'…'}”`;el.appendChild(q)}
+  const w=document.createElement('span');w.className='w';w.textContent=`${bp?'page '+bp:'PDF '+page}${where?' · '+where:''}${loc.guess?' · best guess':''}`;el.appendChild(w);
+  el.hidden=false;
+}
+function showLoc(k){
+  const c=chunks[chunkIdx],loc=curLocs&&curLocs[k];
+  if(!c||!loc){curHl=null;drawHl();setNow(null);return false}
+  const page=c.pages[Math.max(0,Math.min(c.pages.length-1,(loc.image||1)-1))];
+  curHl=loc.box?{page,box:loc.box}:null;setNow(loc,page);
+  if($('follow').checked&&viewPage!==page)showPage(page);else{drawHl();scrollToHl()}
+  return true;
+}
+function drawHl(){
+  const hl=$('hl');if(!hl)return;
+  if(!curHl||curHl.page!==viewPage){hl.hidden=true;return}
+  const [y0,x0,y1,x1]=curHl.box;
+  hl.style.top=y0/10+'%';hl.style.left=x0/10+'%';hl.style.height=(y1-y0)/10+'%';hl.style.width=(x1-x0)/10+'%';hl.hidden=false;
+}
+function scrollToHl(){
+  if(!curHl||curHl.page!==viewPage||!$('follow').checked)return;
+  const wrap=$('pdfwrap'),pb=$('pagebox');if(!pb)return;
+  const mid=pb.offsetTop+(curHl.box[0]+curHl.box[2])/2000*pb.offsetHeight;
+  wrap.scrollTo({top:Math.max(0,mid-wrap.clientHeight*0.4),behavior:'smooth'});
+}
+
 // ---------- Playback ----------
 function renderScript(text){
   const paras=text.split(/\n\s*\n/).map(s=>s.trim()).filter(Boolean);
@@ -786,8 +885,8 @@ audio.addEventListener('timeupdate',()=>{
   if(d)$('seek').value=Math.round(t/d*1000);
   if(d&&paraTimes.length){const k=curParaIndex();
     if(k!==lastK){lastK=k;const ps=$('script').children;[...ps].forEach((p,j)=>p.classList.toggle('now',j===k));
-      if(syncScroll&&!audio.paused)scrollToCurrent(true)}}
-  if(d&&$('follow').checked&&pdf&&chunks[chunkIdx]){const pg=chunks[chunkIdx].pages;const p=pg[Math.min(pg.length-1,Math.floor(t/d*pg.length))];if(p!==viewPage)showPage(p)}
+      if(syncScroll&&!audio.paused)scrollToCurrent(true);showLoc(k)}}
+  if(!curLocs&&d&&$('follow').checked&&pdf&&chunks[chunkIdx]){const pg=chunks[chunkIdx].pages;const p=pg[Math.min(pg.length-1,Math.floor(t/d*pg.length))];if(p!==viewPage)showPage(p)}
 });
 audio.addEventListener('play',setPlayLabel);audio.addEventListener('pause',setPlayLabel);
 audio.addEventListener('loadedmetadata',()=>{$('time').textContent='0:00 / '+fmt(audio.duration);computeParaTimes()});
