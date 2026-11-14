@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Physics Lecturer</title>
 <style>
-:root{--bg:#f6f5f1;--panel:#fff;--ink:#1c1b19;--mute:#6b6963;--line:#dedbd3;--acc:#2f5d8a;--acc2:#e8eff6;--hl:#fff2c4;--err:#b3261e}
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#161615;--panel:#212120;--ink:#ecebe6;--mute:#9a978f;--line:#363532;--acc:#7fb0e0;--acc2:#27323d;--hl:#4a3f16;--err:#ff8a80}}
-:root[data-theme="dark"]{--bg:#161615;--panel:#212120;--ink:#ecebe6;--mute:#9a978f;--line:#363532;--acc:#7fb0e0;--acc2:#27323d;--hl:#4a3f16;--err:#ff8a80}
+:root{--bg:#f6f5f1;--panel:#fff;--ink:#1c1b19;--mute:#6b6963;--line:#dedbd3;--acc:#2f5d8a;--acc2:#e8eff6;--hl:#fff2c4;--err:#b3261e;--ok:#2e7d4f}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#161615;--panel:#212120;--ink:#ecebe6;--mute:#9a978f;--line:#363532;--acc:#7fb0e0;--acc2:#27323d;--hl:#4a3f16;--err:#ff8a80;--ok:#5fbf86}}
+:root[data-theme="dark"]{--bg:#161615;--panel:#212120;--ink:#ecebe6;--mute:#9a978f;--line:#363532;--acc:#7fb0e0;--acc2:#27323d;--hl:#4a3f16;--err:#ff8a80;--ok:#5fbf86}
 *{box-sizing:border-box}
 html,body{height:100%;margin:0}
 body{background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;display:flex;flex-direction:column}
@@ -20,8 +20,13 @@ button:hover{border-color:var(--acc)}
 button.primary{background:var(--acc);color:#fff;border-color:var(--acc)}
 button:disabled{opacity:.5;cursor:default}
 select,input[type=password],input[type=text],textarea{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 8px}
-main{flex:1;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);min-height:0}
-@media (max-width:860px){main{grid-template-columns:1fr;grid-auto-rows:minmax(50vh,1fr);overflow:auto}}
+main{flex:1;display:grid;grid-template-columns:minmax(0,var(--leftw,50%)) 10px minmax(0,1fr);min-height:0}
+#split{cursor:col-resize;background:var(--line);position:relative;touch-action:none;transition:background .15s}
+#split::after{content:"";position:absolute;top:50%;left:50%;width:4px;height:44px;transform:translate(-50%,-50%);border-radius:2px;background:var(--mute);opacity:.6}
+#split:hover,#split.drag,#split:focus-visible{background:var(--acc2);outline:none}
+#split:hover::after,#split.drag::after,#split:focus-visible::after{background:var(--acc);opacity:1}
+body.dragging{user-select:none;cursor:col-resize}
+@media (max-width:860px){main{grid-template-columns:1fr;grid-auto-rows:minmax(50vh,1fr);overflow:auto}#split{display:none}}
 .pane{display:flex;flex-direction:column;min-height:0;min-width:0}
 #left{border-right:1px solid var(--line)}
 .bar{display:flex;gap:8px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line);background:var(--panel);flex-wrap:wrap}
@@ -51,6 +56,21 @@ dialog{border:1px solid var(--line);border-radius:12px;background:var(--panel);c
 dialog label{display:block;margin:10px 0 4px;font-size:13px;color:var(--mute)}
 dialog input,dialog select{width:100%}
 small.hint{color:var(--mute)}
+#steps{display:flex;gap:8px;padding:8px 12px;border-bottom:1px solid var(--line);background:var(--bg);flex-wrap:wrap}
+.step{flex:1 1 210px;display:flex;gap:10px;align-items:center;border:1px solid var(--line);border-radius:10px;padding:7px 10px;min-width:0;background:var(--panel)}
+.step .ico{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-size:13px;font-weight:700;border:2px solid var(--line);color:var(--mute);flex:none}
+.step.ok .ico{background:var(--ok);border-color:var(--ok);color:#fff}
+.step.bad{border-color:var(--err)}
+.step.bad .ico{background:var(--err);border-color:var(--err);color:#fff}
+.step.opt .ico{border-style:dashed}
+.step.wait .ico{border-color:var(--acc);color:var(--acc)}
+.step .txt{flex:1;min-width:0}
+.step b{display:block;font-size:13px}
+.step small{display:block;color:var(--mute);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.step.bad small{color:var(--err)}
+.step button{padding:4px 10px;font-size:13px;flex:none}
+.step.go.ready{border-color:var(--ok)}
+.step.go.ready .ico{background:var(--ok);border-color:var(--ok);color:#fff}
 </style>
 </head>
 <body>
@@ -60,6 +80,12 @@ small.hint{color:var(--mute)}
   <span class="sp"></span>
   <button id="btnSettings">Settings</button>
 </header>
+<div id="steps">
+  <div class="step" id="st1"><span class="ico">1</span><div class="txt"><b>Textbook PDF</b><small id="d1"></small></div><button id="b1"></button></div>
+  <div class="step" id="st2"><span class="ico">2</span><div class="txt"><b>Archive text <span style="font-weight:400;color:var(--mute)">(optional)</span></b><small id="d2"></small></div><button id="b2"></button></div>
+  <div class="step" id="st3"><span class="ico">3</span><div class="txt"><b>Gemini API key</b><small id="d3"></small></div><button id="b3"></button></div>
+  <div class="step go" id="st4"><span class="ico">4</span><div class="txt"><b>Go</b><small id="d4"></small></div><button id="b4" class="primary">Start lecture</button></div>
+</div>
 <main>
   <section class="pane" id="left">
     <div class="bar">
@@ -68,19 +94,18 @@ small.hint{color:var(--mute)}
       <button id="pNext">›</button>
       <label style="display:flex;gap:4px;align-items:center;font-size:13px"><input type="checkbox" id="follow" checked> follow lecture</label>
       <span style="flex:1"></span>
-      <button id="btnRef" title="Optional: the archive.org DjVu XML file, for cleaner prose">Archive text…</button>
-      <button id="btnPdf">Load book PDF…</button>
       <input type="file" id="pdfFile" accept="application/pdf" hidden>
       <input type="file" id="refFile" accept=".xml,.txt" hidden>
     </div>
     <div id="pdfwrap">
       <div id="empty">
-        <p><b>Load the textbook PDF</b> to begin. It stays in your browser; it is never uploaded anywhere except as page images sent to Gemini when a lecture is generated.</p>
+        <p><b>Start with step 1 above.</b> Load the textbook PDF. It stays in your browser; it is never uploaded anywhere except as page images sent to Gemini when a lecture is generated.</p>
         <p><button class="primary" id="btnPdf2">Choose PDF…</button></p>
-        <p style="font-size:13px">Optional: also load the book's <b>DjVu XML</b> file from its archive.org page (under “Download options”). It gives the lecturer cleaner text to work from than the PDF's scan.</p>
+        <p style="font-size:13px">Step 2 is optional: the book's <b>DjVu XML</b> file from its archive.org page (under “Download options”) gives the lecturer cleaner text than a scan.</p>
       </div>
     </div>
   </section>
+  <div id="split" role="separator" aria-orientation="vertical" aria-label="Resize panels" tabindex="0" title="Drag to resize · double-click to reset"></div>
   <section class="pane" id="right">
     <div class="bar">
       <select id="chapter"></select>
@@ -155,7 +180,7 @@ const DB=(()=>{let p;const open=()=>p||(p=new Promise((res,rej)=>{try{const r=in
 
 // ---------- State ----------
 let DATA={chapters:[],ref:{}},pdf=null,chapIdx=0,chunkIdx=0,chunks=[],curScript=null,audio=$('audio')||new Audio(),ansAudio=new Audio();
-let genToken=0,viewPage=0,paraWeights=[],prefetching=new Set(),qaHistory=[],busy=false;
+let pdfName='',refInfo={state:'none',name:'',msg:''},keyInfo={state:'none',msg:''},genToken=0,viewPage=0,paraWeights=[],prefetching=new Set(),qaHistory=[],busy=false;
 audio.preservesPitch=true;ansAudio.preservesPitch=true;
 const status=(m,err)=>{$('status').textContent=m||'';$('status').className=err?'err':''};window.status_=status;
 
@@ -164,7 +189,6 @@ async function loadPdfData(buf){
   const task=pdfjsLib.getDocument({data:new Uint8Array(buf.slice(0))});
   pdf=await task.promise;
   $('empty').style.display='none';
-  $('btnPdf').textContent='Change PDF…';
   await setupBook();
 }
 const clean=s=>s.replace(/[ \t]+/g,' ').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&amp;/g,'&').trim();
@@ -183,7 +207,8 @@ async function setupBook(){
   try{const p=JSON.parse(cfg.get('pos','null'));if(p){chapIdx=Math.min(p.chapIdx||0,DATA.chapters.length-1);chunkIdx=p.chunkIdx||0}}catch(e){}
   sel.value=chapIdx;buildChunks();if(chunkIdx>=chunks.length)chunkIdx=0;markCurrent();
   showPage(chunks[chunkIdx]?chunks[chunkIdx].pages[0]:1);
-  const ia=await DB.get('ref');if(ia)await alignRef(ia);
+  const ia=await DB.get('ref');if(ia){refInfo={state:'ok',name:(await DB.get('refname'))||'archive text',msg:'Matching…'};renderSteps();await alignRef(ia)}
+  renderSteps();
 }
 function parseArchive(text){
   if(/<OBJECT[\s>]/.test(text)){
@@ -200,9 +225,9 @@ async function alignRef(ia){
   for(let o=-12;o<=40;o++){let tot=0;for(const p of sample){const j=p-1+o;if(j<0||j>=ia.length)continue;const a=words[p],b=norm(ia[j]);if(a.size<12||b.size<12)continue;let c=0;for(const w of a)if(b.has(w))c++;tot+=c/Math.min(a.size,b.size)}if(tot>best.s)best={s:tot,o}}
   const avg=best.s/sample.length;
   DATA.ref={};
-  if(avg<0.25){status('The archive text did not match this PDF well, so it will be ignored.',true);return}
+  if(avg<0.25){refInfo.state='bad';refInfo.msg='Does not match this PDF, so it will be ignored.';renderSteps();return}
   for(let p=1;p<=pdf.numPages;p++){const j=p-1+best.o;DATA.ref[p]=j>=0&&j<ia.length?clean(ia[j]):''}
-  status(`Archive text matched to the PDF (page shift ${best.o}).`);
+  refInfo.state='ok';refInfo.msg=`Matched to the PDF (${Math.round(avg*100)}% word overlap)`;renderSteps();
 }
 let renderTask=null;
 async function showPage(n){
@@ -434,33 +459,89 @@ $('btnRecap').onclick=()=>ask('', 'recap');
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
 if(SR){$('btnMic').hidden=false;$('btnMic').onclick=()=>{const r=new SR();r.lang='en-US';r.onresult=e=>{$('q').value=e.results[0][0].transcript;$('btnAsk').click()};r.start();audio.pause()}}
 
+// ---------- Resizable split ----------
+(function(){
+  const main=document.querySelector('main'),sp=$('split');
+  const MIN=18,MAX=88;let timer;
+  const apply=pct=>{pct=Math.max(MIN,Math.min(MAX,pct));main.style.setProperty('--leftw',pct+'%');cfg.set('leftw',String(pct));return pct};
+  const refit=()=>{clearTimeout(timer);timer=setTimeout(()=>{if(pdf&&viewPage)showPage(viewPage)},150)};
+  const saved=parseFloat(cfg.get('leftw','50'));if(saved&&saved!==50)apply(saved);
+  sp.addEventListener('pointerdown',e=>{sp.setPointerCapture(e.pointerId);sp.classList.add('drag');document.body.classList.add('dragging');e.preventDefault()});
+  sp.addEventListener('pointermove',e=>{if(!sp.hasPointerCapture(e.pointerId))return;const r=main.getBoundingClientRect();apply((e.clientX-r.left)/r.width*100)});
+  const end=e=>{if(sp.hasPointerCapture(e.pointerId))sp.releasePointerCapture(e.pointerId);sp.classList.remove('drag');document.body.classList.remove('dragging');refit()};
+  sp.addEventListener('pointerup',end);sp.addEventListener('pointercancel',end);
+  sp.addEventListener('dblclick',()=>{apply(50);refit()});
+  sp.addEventListener('keydown',e=>{const cur=parseFloat(cfg.get('leftw','50'))||50;
+    if(e.key==='ArrowLeft'){apply(cur-3);refit();e.preventDefault()}else if(e.key==='ArrowRight'){apply(cur+3);refit();e.preventDefault()}});
+  window.addEventListener('resize',refit);
+})();
+
+// ---------- Setup checklist ----------
+async function checkKey(){
+  const key=cfg.get('key','');
+  if(!key){keyInfo={state:'none',msg:''};renderSteps();return}
+  keyInfo={state:'checking',msg:'Checking with Google…'};renderSteps();
+  try{
+    const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=1',{headers:{'x-goog-api-key':key}});
+    keyInfo=r.ok?{state:'ok',msg:'Saved and accepted by Google'}:{state:'bad',msg:'Google rejected this key. Check it and save it again.'};
+  }catch(e){keyInfo={state:'warn',msg:'Saved. Could not reach Google to check it.'}}
+  renderSteps();
+}
+function setStep(id,cls,icon,detail,btn){
+  const el=$('st'+id);el.className='step'+(id===4?' go':'')+(cls?' '+cls:'');
+  el.querySelector('.ico').textContent=icon;$('d'+id).textContent=detail;$('d'+id).title=detail;
+  if(btn!==undefined)$('b'+id).textContent=btn;
+}
+function renderSteps(){
+  const hasPdf=!!pdf,hasKey=!!cfg.get('key','');
+  setStep(1,hasPdf?'ok':'wait',hasPdf?'✓':'1',hasPdf?`${pdfName||'PDF'} · ${pdf.numPages} pages`:'Not loaded yet',hasPdf?'Change…':'Choose PDF…');
+  const r=refInfo;
+  if(r.state==='ok')setStep(2,'ok','✓',`${r.name||'Archive text'} · ${r.msg}`,'Change…');
+  else if(r.state==='bad')setStep(2,'bad','!',r.msg,'Choose file…');
+  else setStep(2,'opt','–','Skipped. The lecture will use the page images only.','Choose file…');
+  const k=keyInfo;
+  if(!hasKey)setStep(3,'wait','3','Not set','Set key…');
+  else if(k.state==='bad')setStep(3,'bad','!',k.msg,'Change…');
+  else if(k.state==='ok')setStep(3,'ok','✓',k.msg,'Change…');
+  else setStep(3,k.state==='warn'?'ok':'wait',k.state==='warn'?'✓':'…',k.msg||'Saved','Change…');
+  const ready=hasPdf&&hasKey&&keyInfo.state!=='bad';
+  const miss=[];if(!hasPdf)miss.push('step 1');if(!hasKey)miss.push('step 3');else if(keyInfo.state==='bad')miss.push('a valid key in step 3');
+  setStep(4,ready?'ready':'',ready?'✓':'4',ready?'Everything is set. Press Start, or Play below.':`Waiting for ${miss.join(' and ')}`);
+  $('b4').disabled=!ready;
+}
+$('b1').onclick=()=>$('pdfFile').click();
+$('b2').onclick=()=>$('refFile').click();
+$('b3').onclick=()=>{$('btnSettings').click();setTimeout(()=>$('key').focus(),50)};
+$('b4').onclick=()=>{$('btnPlay').click()};
+
 // ---------- Settings & init ----------
 $('btnSettings').onclick=()=>{$('key').value=cfg.get('key','');$('voice').value=cfg.get('voice','Kore');$('model').value=cfg.get('model','gemini-flash-latest');$('ttsModel').value=cfg.get('ttsModel','gemini-3.8-flash-tts');$('chunkPages').value=cfg.get('chunkPages','3');$('dlg').showModal()};
 $('dlg').addEventListener('close',()=>{
   if($('dlg').returnValue!=='ok')return;
   cfg.set('key',$('key').value.trim());cfg.set('voice',$('voice').value);cfg.set('model',$('model').value.trim());cfg.set('ttsModel',$('ttsModel').value.trim());
   const old=cfg.get('chunkPages','3');cfg.set('chunkPages',$('chunkPages').value);if(old!==$('chunkPages').value){buildChunks();chunkIdx=0;markCurrent()}
-  status('Settings saved.');
+  status('Settings saved.');checkKey();
 });
 $('btnClear').onclick=async()=>{if(confirm('Delete all saved lectures and audio on this device?')){await DB.clearPrefix('script:');await DB.clearPrefix('prog:');buildChunks();status('Cleared.')}};
 VOICES.forEach(v=>{const o=document.createElement('option');o.textContent=v;$('voice').appendChild(o)});
-for(const id of ['btnPdf','btnPdf2'])$(id).onclick=()=>$('pdfFile').click();
-$('pdfFile').onchange=async e=>{const f=e.target.files[0];if(!f)return;status('Loading PDF…');const buf=await f.arrayBuffer();await DB.set('pdf',buf);await loadPdfData(buf);status('')};
+$('btnPdf2').onclick=()=>$('pdfFile').click();
+$('pdfFile').onchange=async e=>{const f=e.target.files[0];if(!f)return;status('Loading PDF…');const buf=await f.arrayBuffer();try{await loadPdfData(buf);await DB.set('pdf',buf);pdfName=f.name;await DB.set('pdfname',f.name);status('')}catch(err){status('That file could not be opened as a PDF.',true)}renderSteps()};
 $('pPrev').onclick=()=>{$('follow').checked=false;showPage(viewPage-1)};
 $('pNext').onclick=()=>{$('follow').checked=false;showPage(viewPage+1)};
 $('chapter').onchange=e=>{if(!DATA.chapters.length)return;genToken++;audio.pause();chapIdx=+e.target.value;chunkIdx=0;buildChunks();markCurrent();saveProgress();curScript=null;$('script').innerHTML='<p style="color:var(--mute)">Press Play to start this chapter.</p>';if(pdf)showPage(DATA.chapters[chapIdx].start)};
 
-$('btnRef').onclick=()=>$('refFile').click();
 $('refFile').onchange=async e=>{const f=e.target.files[0];if(!f)return;status('Reading archive text…');
   const pages=parseArchive(await f.text());
-  if(!pages){status('That file has no page breaks. Please use the “DjVu XML” file from the archive.org download options.',true);return}
-  await DB.set('ref',pages);if(pdf)await alignRef(pages);else status('Archive text saved; now load the PDF.')};
+  if(!pages){refInfo={state:'bad',name:f.name,msg:'No page breaks in this file. Use the “DjVu XML” file from archive.org.'};status('');renderSteps();return}
+  await DB.set('ref',pages);await DB.set('refname',f.name);refInfo={state:'ok',name:f.name,msg:'Saved'};
+  if(pdf)await alignRef(pages);else status('');
+  renderSteps()};
 (async function init(){
   setSpeed(cfg.get('speed','1'));
   if(typeof pdfjsLib==='undefined'){status('PDF viewer failed to load (network).',true);return}
   try{const w=await (await fetch('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js')).text();pdfjsLib.GlobalWorkerOptions.workerSrc=URL.createObjectURL(new Blob([w],{type:'text/javascript'}))}catch(e){pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'}
-  const saved=await DB.get('pdf');if(saved){try{await loadPdfData(saved)}catch(e){status('Could not reopen the saved PDF: '+e.message,true)}}
-  if(!cfg.get('key',''))status('Open Settings and add your Gemini API key to get started.');
+  pdfName=(await DB.get('pdfname'))||'';const saved=await DB.get('pdf');if(saved){try{await loadPdfData(saved)}catch(e){status('Could not reopen the saved PDF: '+e.message,true)}}
+  renderSteps();checkKey();
 })();
 </script>
 </body>
