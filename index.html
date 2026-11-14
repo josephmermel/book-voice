@@ -56,6 +56,27 @@ dialog{border:1px solid var(--line);border-radius:12px;background:var(--panel);c
 dialog label{display:block;margin:10px 0 4px;font-size:13px;color:var(--mute)}
 dialog input,dialog select{width:100%}
 small.hint{color:var(--mute)}
+[hidden]{display:none!important}
+#chunks button.busy::after{content:" ●";color:var(--acc);animation:pulse 1s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.25}}
+#prog{padding:10px 12px;border-bottom:1px solid var(--line);background:var(--acc2);display:flex;flex-direction:column;gap:8px}
+#prog.err{background:var(--panel);border-left:4px solid var(--err)}
+#progMain{display:flex;flex-direction:column;gap:7px}
+#prog .ph{display:flex;justify-content:space-between;gap:8px;font-size:14px}
+.stages{display:flex;gap:6px;flex-wrap:wrap;font-size:12px}
+.stg{padding:2px 9px;border-radius:999px;border:1px solid var(--line);color:var(--mute);background:var(--panel)}
+.stg.done{color:var(--ok);border-color:var(--ok)}
+.stg.act{color:var(--acc);border-color:var(--acc);font-weight:600}
+.bar2{height:8px;border-radius:4px;background:var(--line);overflow:hidden}
+.bar2 i{display:block;height:100%;width:0;background:var(--acc);transition:width .6s;border-radius:4px}
+.bar2.live i{background:linear-gradient(90deg,var(--acc) 0,var(--acc) 40%,var(--ok) 50%,var(--acc) 60%);background-size:200% 100%;animation:sh 1.4s linear infinite}
+@keyframes sh{to{background-position:-200% 0}}
+@media (prefers-reduced-motion:reduce){.bar2.live i,#chunks button.busy::after{animation:none}}
+#progNote{font-size:13px}
+#prog.err #progNote{color:var(--err)}
+#progIdle,#progBg{font-size:12px;color:var(--mute)}
+.prow{display:flex;gap:8px}
+#script .empty{color:var(--mute)}
 #steps{display:flex;gap:8px;padding:8px 12px;border-bottom:1px solid var(--line);background:var(--bg);flex-wrap:wrap}
 .step{flex:1 1 210px;display:flex;gap:10px;align-items:center;border:1px solid var(--line);border-radius:10px;padding:7px 10px;min-width:0;background:var(--panel)}
 .step .ico{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-size:13px;font-weight:700;border:2px solid var(--line);color:var(--mute);flex:none}
@@ -115,6 +136,7 @@ small.hint{color:var(--mute)}
     <div id="player">
       <div class="row">
         <button id="btnPrev" title="Previous section">⏮</button>
+        <button id="btnGen" class="primary" hidden>Generate lecture</button>
         <button id="btnPlay" class="primary" style="min-width:84px">▶ Play</button>
         <button id="btnNext" title="Next section">⏭</button>
         <button id="btnBack" title="Back 15 seconds">−15s</button>
@@ -130,7 +152,18 @@ small.hint{color:var(--mute)}
       </div>
       <div id="status"></div>
     </div>
-    <div id="script"><p style="color:var(--mute)">Pick a chapter and section, then press Play. The first time a section is played it is generated (about a minute); after that it is saved on this device.</p></div>
+    <div id="prog" hidden>
+      <div id="progMain">
+        <div class="ph"><b id="progTitle"></b><span id="progTime"></span></div>
+        <div class="stages"><span class="stg" id="s1"></span><span class="stg" id="s2"></span><span class="stg" id="s3"></span></div>
+        <div class="bar2" id="progBar"><i id="progFill"></i></div>
+        <div id="progNote"></div>
+        <div id="progIdle"></div>
+        <div class="prow"><button id="btnCancel">Cancel</button><button id="btnRetry" class="primary" hidden>Try again</button></div>
+      </div>
+      <div id="progBg"></div>
+    </div>
+    <div id="script"><p style="color:var(--mute)">Load your PDF and add your API key (steps above), then pick a section and press <b>Generate lecture</b>.</p></div>
     <div id="qa">
       <div id="log"></div>
       <div id="askrow">
@@ -156,6 +189,8 @@ small.hint{color:var(--mute)}
     <input type="text" id="ttsModel" value="gemini-3.8-flash-tts">
     <label>Pages per section</label>
     <select id="chunkPages"><option value="2">2 pages</option><option value="3" selected>3 pages</option><option value="4">4 pages</option></select>
+    <label>Prepare the next section while one is playing</label>
+    <select id="prefetchOn"><option value="1">Yes</option><option value="0">No (uses less of your API quota)</option></select>
     <p style="display:flex;gap:8px;justify-content:space-between;margin-top:16px">
       <button type="button" id="btnClear">Clear saved lectures</button>
       <button class="primary" value="ok">Save</button>
@@ -207,6 +242,7 @@ async function setupBook(){
   try{const p=JSON.parse(cfg.get('pos','null'));if(p){chapIdx=Math.min(p.chapIdx||0,DATA.chapters.length-1);chunkIdx=p.chunkIdx||0}}catch(e){}
   sel.value=chapIdx;buildChunks();if(chunkIdx>=chunks.length)chunkIdx=0;markCurrent();
   showPage(chunks[chunkIdx]?chunks[chunkIdx].pages[0]:1);
+  if(chunks[chunkIdx])await loadSection(chunkIdx);
   const ia=await DB.get('ref');if(ia){refInfo={state:'ok',name:(await DB.get('refname'))||'archive text',msg:'Matching…'};renderSteps();await alignRef(ia)}
   renderSteps();
 }
@@ -254,38 +290,54 @@ function buildChunks(){
   for(let p=ch.start,i=0;p<=ch.end;p+=per,i++){const pages=[];for(let q=p;q<Math.min(p+per,ch.end+1);q++)pages.push(q);chunks.push({i,pages,key:`ch${ch.n}_p${pages[0]}-${pages[pages.length-1]}`})}
   $('chapInfo').textContent=`PDF pages ${ch.start}–${ch.end} · ${chunks.length} sections`;
   const box=$('chunks');box.innerHTML='';
-  chunks.forEach(c=>{const b=document.createElement('button');b.textContent=`pp. ${c.pages[0]}–${c.pages[c.pages.length-1]}`;b.onclick=()=>selectChunk(c.i,true);b.dataset.i=c.i;box.appendChild(b);
+  chunks.forEach(c=>{const b=document.createElement('button');b.textContent=`pp. ${c.pages[0]}–${c.pages[c.pages.length-1]}`;b.onclick=()=>selectChunk(c.i);b.dataset.i=c.i;box.appendChild(b);
     DB.get('script:'+c.key).then(s=>{if(s&&s.audio)b.classList.add('done')})});
 }
 function markCurrent(){document.querySelectorAll('#chunks button').forEach(b=>b.classList.toggle('cur',+b.dataset.i===chunkIdx));
   const cb=document.querySelector(`#chunks button[data-i="${chunkIdx}"]`);if(cb)cb.scrollIntoView({block:'nearest',inline:'center'})}
 function saveProgress(){cfg.set('pos',JSON.stringify({chapIdx,chunkIdx,rate:audio.playbackRate}))}
-async function selectChunk(i,autoplay){
-  genToken++;audio.pause();chunkIdx=i;curScript=null;markCurrent();saveProgress();
+async function selectChunk(i){
+  audio.pause();chunkIdx=i;markCurrent();saveProgress();
+  if(job&&job.error)job=null;
   if(pdf)showPage(chunks[i].pages[0]);
-  $('script').innerHTML='<p style="color:var(--mute)">Not generated yet.</p>';
-  setPlayLabel();
-  if(autoplay)await playChunk(i);
+  await loadSection(i);renderProg();
+}
+async function loadSection(i){
+  const rec=await DB.get('script:'+chunks[i].key);
+  if(i!==chunkIdx)return;
+  if(rec&&rec.script&&rec.audio){
+    curScript=rec.script;renderScript(rec.script);
+    if(curUrl)URL.revokeObjectURL(curUrl);curUrl=URL.createObjectURL(rec.audio);
+    audio.src=curUrl;audio.playbackRate=parseFloat(cfg.get('speed','1'));secReady=true;status('');
+  }else{
+    secReady=false;curScript=null;paraWeights=[];audio.removeAttribute('src');audio.load();
+    $('time').textContent='0:00 / 0:00';$('seek').value=0;
+    if(rec&&rec.script){renderScript(rec.script);status('The lecture text is saved, but the voice is not recorded yet. Press Generate lecture to finish it.')}
+    else{status('');$('script').innerHTML=`<p class="empty">Section ${secLabel(i)} has not been generated yet. Press <b>Generate lecture</b>. The first time takes a few minutes; after that it is saved on this device.</p>`}
+  }
+  setPlayLabel();updateButtons();
 }
 
 // ---------- Gemini ----------
-const FALLBACK_TEXT=['gemini-3.8-flash','gemini-2.5-flash','gemini-3.5-flash','gemini-flash-latest'];
+const FALLBACK_TEXT=['gemini-3.8-flash','gemini-3.5-flash','gemini-flash-latest'];
 const FALLBACK_TTS=['gemini-3.8-flash-tts','gemini-3.1-flash-tts-preview','gemini-2.5-flash-preview-tts','gemini-3.8-flash-lite-tts'];
-async function gem(model,body,rounds=4,bg=false){
+async function gem(model,body,rounds=4,ctl=null){
   const key=cfg.get('key','');if(!key)throw new Error('Add your Gemini API key in Settings first.');
   const pool=FALLBACK_TTS.includes(model)||/tts/.test(model)?FALLBACK_TTS:FALLBACK_TEXT;
   const models=[model].concat(pool.filter(m=>m!==model));
   let last;
   for(let a=0;a<rounds;a++){
-    for(const m of models){
+    for(let k=0;k<models.length;k++){
+      const m=models[k];chk(ctl);
       let r;
-      try{r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':key},body:JSON.stringify(body)})}
-      catch(e){last=e;continue}
+      try{r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`,{method:'POST',signal:ctl?ctl.ac.signal:undefined,headers:{'Content-Type':'application/json','x-goog-api-key':key},body:JSON.stringify(body)})}
+      catch(e){chk(ctl);last=e;continue}
       if(r.ok)return r.json();
       const t=await r.text();last=new Error(`Gemini ${r.status}: ${t.slice(0,200)}`);
-      if([429,500,502,503,504,404].includes(r.status)){if(!bg)status(`${m} busy (${r.status}); trying another model…`);continue}
+      if([429,500,502,503,504,404].includes(r.status)){if(ctl)ctl.note(`${m} is busy (error ${r.status}). Trying another model… (round ${a+1} of ${rounds})`);continue}
       throw last;
     }
+    if(ctl)ctl.note(`All models are busy. Waiting ${Math.round(2.5*(a+1))} seconds, then retrying… (round ${a+1} of ${rounds})`);
     await sleep(2500*(a+1));
   }
   throw last||new Error('Gemini request failed');
@@ -298,8 +350,8 @@ const LECTURE_STYLE="You are a warm, rigorous university physics instructor givi
 "Say every equation naturally in spoken English (for example 'x squared over two', 'the integral from zero to infinity of'), and name the symbols. Describe figures briefly and say what they show. Skip page numbers, running headers and figure numbers' layout details. "+
 "Output spoken plain text only: no markdown, no LaTeX, no bullet points, no stage directions. Use short paragraphs separated by blank lines.";
 
-async function makeScript(ch,chunk,prevTail,visible){const status=m=>{if(visible)window.status_(m)};
-  const imgs=[];for(const p of chunk.pages){status(`Reading page ${p}…`);imgs.push(await pageImage(p))}
+async function makeScript(ch,chunk,prevTail,ctl){
+  const imgs=[];for(let k=0;k<chunk.pages.length;k++){chk(ctl);ctl.stage('read',k+1,chunk.pages.length);imgs.push(await pageImage(chunk.pages[k]))}
   const ref=chunk.pages.map(p=>`[Page ${p}]\n${DATA.ref[p]||''}`).join('\n\n');
   const intro=chunk.i===0?"This is the start of the chapter; open by briefly introducing it. ":"This continues a lecture already under way; do NOT greet or re-introduce. Continue smoothly. ";
   const text=`${LECTURE_STYLE}\n\nBook: Berkeley Physics Course Vol. 1, Mechanics. Chapter ${ch.n}: ${ch.title}. ${intro}`+
@@ -308,8 +360,8 @@ async function makeScript(ch,chunk,prevTail,visible){const status=m=>{if(visible
   const parts=[{text}].concat(imgs.map(d=>({inline_data:{mime_type:'image/jpeg',data:d}})));
   let tries=0,extra='';
   while(tries<3){
-    status('Writing the lecture…');
-    const r=await gem(cfg.get('model','gemini-flash-latest'),{contents:[{parts:parts.concat(extra?[{text:extra}]:[])}],generationConfig:{maxOutputTokens:8192,temperature:0.7}});
+    ctl.stage('write');
+    const r=await gem(cfg.get('model','gemini-flash-latest'),{contents:[{parts:parts.concat(extra?[{text:extra}]:[])}],generationConfig:{maxOutputTokens:8192,temperature:0.7}},4,ctl);
     const t=textOf(r);if(t&&t.length>200)return t;
     const fr=r.candidates&&r.candidates[0]&&r.candidates[0].finishReason;
     tries++;extra=`(Retry: the previous attempt was blocked as too close to the source. Explain the ideas conceptually and loosely paraphrased, as if teaching at a whiteboard, with the equations stated in words.)`;
@@ -329,9 +381,9 @@ function splitSegments(text,max=1300){
   if(cur)segs.push(cur);return segs;
 }
 function b64ToBytes(b){const s=atob(b);const u=new Uint8Array(s.length);for(let i=0;i<s.length;i++)u[i]=s.charCodeAt(i);return u}
-async function tts(text){
+async function tts(text,ctl){
   const voice=cfg.get('voice','Kore');
-  const r=await gem(cfg.get('ttsModel','gemini-3.8-flash-tts'),{contents:[{parts:[{text:'Say in a calm, clear, friendly instructor voice, at a natural teaching pace: '+text}]}],generationConfig:{responseModalities:['AUDIO'],speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:voice}}}}});
+  const r=await gem(cfg.get('ttsModel','gemini-3.8-flash-tts'),{contents:[{parts:[{text:'Say in a calm, clear, friendly instructor voice, at a natural teaching pace: '+text}]}],generationConfig:{responseModalities:['AUDIO'],speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:voice}}}}},4,ctl);
   const p=r.candidates&&r.candidates[0]&&r.candidates[0].content&&r.candidates[0].content.parts&&r.candidates[0].content.parts.find(x=>x.inlineData);
   if(!p)throw new Error('The voice model returned no audio.');
   return b64ToBytes(p.inlineData.data);
@@ -343,22 +395,108 @@ function pcmToWav(chunksArr){
   let o=44;chunksArr.forEach(c=>{new Uint8Array(buf,o,c.length).set(c);o+=c.length});return new Blob([buf],{type:'audio/wav'});
 }
 
-// Make (or load) a lecture for a chunk; returns {script,blob}
-async function ensureChunk(i,visible){
+// Make (or load) a lecture for a section; returns the saved record
+async function ensureChunk(i,ctl){
   const ch=DATA.chapters[chapIdx],chunk=chunks[i],key='script:'+chunk.key;
   let rec=await DB.get(key);
   if(rec&&rec.script&&rec.audio)return rec;
   if(!pdf)throw new Error('Load the book PDF first.');
   let prevTail='';
   if(i>0){const pr=await DB.get('script:'+chunks[i-1].key);if(pr&&pr.script)prevTail=pr.script.slice(-500)}
-  const say=m=>{if(visible)status(m)};
-  if(!rec||!rec.script){rec={script:await makeScript(ch,chunk,prevTail,visible)};await DB.set(key,rec);if(visible){curScript=rec.script;renderScript(rec.script)}}
+  if(!rec||!rec.script){rec={script:await makeScript(ch,chunk,prevTail,ctl)};chk(ctl);await DB.set(key,rec)}
+  ctl.script(rec.script);
   const segs=splitSegments(rec.script);const pcm=[];
-  for(let s=0;s<segs.length;s++){say(`Recording voice ${s+1}/${segs.length}…`);pcm.push(await tts(segs[s]))}
-  rec.audio=pcmToWav(pcm);await DB.set(key,rec);
-  const b=document.querySelector(`#chunks button[data-i="${i}"]`);if(b)b.classList.add('done');
+  for(let s=0;s<segs.length;s++){chk(ctl);ctl.stage('voice',s+1,segs.length);pcm.push(await tts(segs[s],ctl))}
+  chk(ctl);rec.audio=pcmToWav(pcm);await DB.set(key,rec);
   return rec;
 }
+
+// ---------- Generation jobs and progress ----------
+let job=null,bgJob=null,secReady=false,ticker=null,curUrl=null;
+const chk=ctl=>{if(ctl&&ctl.cancelled)throw new Error('cancelled')};
+const secLabel=i=>{const c=chunks[i];return c?`pp. ${c.pages[0]}–${c.pages[c.pages.length-1]}`:''};
+const mmss=s=>{s=Math.max(0,Math.floor(s));return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')};
+const jobActive=()=>job&&!job.done&&!job.error;
+function setBusyChip(i,on){const b=document.querySelector(`#chunks button[data-i="${i}"]`);if(b){b.classList.toggle('busy',on);if(!on&&on!==undefined)DB.get('script:'+chunks[i].key).then(r=>{if(r&&r.audio)b.classList.add('done')})}}
+function makeJob(i,bg,autoplay){
+  const j={i,bg,autoplay:!!autoplay,stage:'read',cur:0,total:chunks[i].pages.length,t0:Date.now(),tStage:Date.now(),tStep:Date.now(),note:'',error:null,done:false,text:'starting…',
+    ctl:{cancelled:false,ac:new AbortController()}};
+  j.ctl.stage=(st,cur,total)=>{if(j.stage!==st)j.tStage=Date.now();j.stage=st;j.cur=cur||0;j.total=total||0;j.tStep=Date.now();j.note='';
+    j.text=st==='read'?'reading pages…':st==='write'?'writing the lecture…':`recording voice ${cur}/${total}…`;renderProg()};
+  j.ctl.note=m=>{j.note=m;renderProg()};
+  j.ctl.script=t=>{if(!j.bg&&chunkIdx===j.i){curScript=t;renderScript(t)}};
+  setBusyChip(i,true);startTicker();return j;
+}
+async function runJob(j){
+  try{
+    await ensureChunk(j.i,j.ctl);
+    if(j.ctl.cancelled)return;
+    j.done=true;setBusyChip(j.i,false);
+    if(chunkIdx===j.i){await loadSection(j.i);if(j.autoplay&&!j.bg)await startPlayback()}
+    else if(!j.bg)status(`Section ${secLabel(j.i)} is ready.`);
+  }catch(e){
+    setBusyChip(j.i,false);
+    if(j.ctl.cancelled)return;
+    j.error=e.message||String(e);
+  }finally{if(bgJob===j)bgJob=null;renderProg();updateButtons()}
+}
+function generate(i,autoplay){
+  if(jobActive())return;status('');
+  if(bgJob&&bgJob.i===i){job=bgJob;bgJob=null;job.bg=false;job.autoplay=!!autoplay;renderProg();updateButtons();return}
+  cancelBg();job=makeJob(i,false,autoplay);runJob(job);renderProg();updateButtons();
+}
+async function prefetch(i){
+  if(cfg.get('prefetch','1')!=='1'||i>=chunks.length||bgJob||jobActive())return;
+  const rec=await DB.get('script:'+chunks[i].key);if(rec&&rec.script&&rec.audio)return;
+  if(bgJob||jobActive())return;
+  bgJob=makeJob(i,true,false);runJob(bgJob);renderProg();
+}
+function cancelBg(){if(bgJob){bgJob.ctl.cancelled=true;bgJob.ctl.ac.abort();setBusyChip(bgJob.i,false);bgJob=null}}
+function cancelJob(){if(job){job.ctl.cancelled=true;job.ctl.ac.abort();setBusyChip(job.i,false);job=null}}
+function cancelAll(){cancelJob();cancelBg();renderProg();updateButtons()}
+function startTicker(){if(!ticker)ticker=setInterval(()=>{if(jobActive()||bgJob)renderProg();else{clearInterval(ticker);ticker=null}},500)}
+function overallPct(j){
+  if(j.stage==='read')return 2+8*(j.cur/Math.max(1,j.total));
+  if(j.stage==='write')return 10+38*(1-Math.exp(-((Date.now()-j.tStage)/1000)/35));
+  return 50+50*(Math.max(0,j.cur-1)/Math.max(1,j.total));
+}
+function renderProg(){
+  const p=$('prog');
+  const bgTxt=bgJob?`Next section (${secLabel(bgJob.i)}) is being prepared in the background: ${bgJob.text}`:'';
+  if(!job||(job.done&&!job.error)){$('progMain').hidden=true;$('progBg').textContent=bgTxt;p.hidden=!bgTxt;p.className='';return}
+  p.hidden=false;$('progMain').hidden=false;
+  const now=Date.now(),el=(now-job.t0)/1000;
+  p.className=job.error?'err':'';
+  $('progTitle').textContent=job.error?`Generation failed for ${secLabel(job.i)}`:`Generating section ${secLabel(job.i)}`;
+  $('progTime').textContent=job.error?'':`${mmss(el)} elapsed`;
+  const order=['read','write','voice'],idx=order.indexOf(job.stage),names=['Read pages','Write lecture','Record voice'];
+  names.forEach((nm,n)=>{const e=$('s'+(n+1));e.className='stg'+(n<idx?' done':(n===idx&&!job.error)?' act':'');e.textContent=(n<idx?'✓ ':'')+nm+(n===2&&idx===2&&job.total?` ${job.cur}/${job.total}`:'')});
+  $('progFill').style.width=(job.error?overallPct(job):overallPct(job))+'%';
+  $('progBar').className='bar2'+(job.error?'':' live');
+  let note;
+  if(job.error)note=job.error;
+  else if(job.note)note=job.note;
+  else if(job.stage==='read')note=`Rendering page ${job.cur} of ${job.total} to send to Gemini…`;
+  else if(job.stage==='write')note='Gemini is reading the pages and writing the lecture. This usually takes 30 to 90 seconds.';
+  else note=`Recording voice part ${job.cur} of ${job.total}. Each part takes about 15 to 40 seconds.`;
+  $('progNote').textContent=note;
+  const stepEl=(now-job.tStep)/1000,limit={read:30,write:150,voice:90}[job.stage]||90;
+  $('progIdle').textContent=job.error?'':`This step: ${mmss(stepEl)}`+(stepEl>limit?'. That is longer than usual. Gemini can be slow when it is busy. It keeps retrying by itself, or you can cancel and try again.':'');
+  $('btnCancel').hidden=!!job.error;$('btnRetry').hidden=!job.error;
+  $('progBg').textContent=bgTxt;
+}
+function updateButtons(){
+  const active=jobActive(),here=active&&job.i===chunkIdx;
+  const failedHere=job&&job.error&&job.i===chunkIdx;
+  $('btnGen').hidden=secReady||here;
+  $('btnGen').disabled=active&&!here;
+  $('btnGen').textContent=failedHere?'Try again':'Generate lecture';
+  $('btnGen').title=(active&&!here)?'Another section is generating right now':'';
+  $('btnPlay').disabled=!secReady;
+}
+$('btnGen').onclick=()=>generate(chunkIdx,false);
+$('btnCancel').onclick=()=>{cancelJob();renderProg();updateButtons();status('Cancelled.')};
+$('btnRetry').onclick=()=>{const i=job.i,ap=job.autoplay;job=null;generate(i,ap)};
 
 // ---------- Playback ----------
 function renderScript(text){
@@ -368,25 +506,11 @@ function renderScript(text){
 }
 function fmt(s){if(!isFinite(s))s=0;s=Math.floor(s);return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')}
 function setPlayLabel(){$('btnPlay').textContent=(!audio.paused&&!audio.ended)?'⏸ Pause':'▶ Play'}
-let curUrl=null;
-async function playChunk(i){
-  const my=++genToken;chunkIdx=i;markCurrent();
-  if(pdf&&$('follow').checked)showPage(chunks[i].pages[0]);
-  try{
-    busy=true;$('btnPlay').disabled=true;
-    const rec=await ensureChunk(i,true);
-    if(my!==genToken)return;
-    curScript=rec.script;renderScript(rec.script);
-    if(curUrl)URL.revokeObjectURL(curUrl);curUrl=URL.createObjectURL(rec.audio);
-    audio.src=curUrl;audio.playbackRate=parseFloat(cfg.get('speed','1'));
-    await audio.play();status('');saveProgress();
-    prefetch(i+1);
-  }catch(e){if(my===genToken)status(e.message||String(e),true)}
-  finally{busy=false;$('btnPlay').disabled=false;setPlayLabel()}
-}
-async function prefetch(i){
-  if(i>=chunks.length||prefetching.has(i))return;prefetching.add(i);
-  try{await ensureChunk(i,false)}catch(e){/* ignore; will retry when played */}finally{prefetching.delete(i)}
+async function startPlayback(){
+  if(!secReady)return;
+  if(!ansAudio.paused)ansAudio.pause();
+  try{await audio.play()}catch(e){status('Press Play to start.');return}
+  status('');saveProgress();prefetch(chunkIdx+1);
 }
 audio.addEventListener('timeupdate',()=>{
   const d=audio.duration||0,t=audio.currentTime;$('time').textContent=fmt(t)+' / '+fmt(d);
@@ -397,17 +521,19 @@ audio.addEventListener('timeupdate',()=>{
   if(d&&$('follow').checked&&pdf&&chunks[chunkIdx]){const pg=chunks[chunkIdx].pages;const p=pg[Math.min(pg.length-1,Math.floor(t/d*pg.length))];if(p!==viewPage)showPage(p)}
 });
 audio.addEventListener('play',setPlayLabel);audio.addEventListener('pause',setPlayLabel);
-audio.addEventListener('ended',()=>{setPlayLabel();
-  const rec=chunks[chunkIdx];DB.set('prog:'+rec.key,1);
-  if(chunkIdx+1<chunks.length)playChunk(chunkIdx+1);else if(chapIdx+1<DATA.chapters.length){status('Chapter finished. Pick the next chapter when ready.')}});
+audio.addEventListener('loadedmetadata',()=>{$('time').textContent='0:00 / '+fmt(audio.duration)});
+audio.addEventListener('ended',async()=>{setPlayLabel();
+  DB.set('prog:'+chunks[chunkIdx].key,1);
+  if(chunkIdx+1<chunks.length){await selectChunk(chunkIdx+1);if(secReady)startPlayback();else generate(chunkIdx,true)}
+  else status('Chapter finished. Pick the next chapter when ready.')});
 $('seek').oninput=()=>{if(audio.duration)audio.currentTime=audio.duration*$('seek').value/1000};
 $('btnPlay').onclick=async()=>{
-  if(ansAudio&&!ansAudio.paused)ansAudio.pause();
-  if(audio.src&&audio.currentSrc&&!audio.ended&&curScript){if(audio.paused)audio.play();else audio.pause()}
-  else await playChunk(chunkIdx);
+  if(!secReady)return;
+  if(!ansAudio.paused)ansAudio.pause();
+  if(audio.paused){if(audio.ended)audio.currentTime=0;await startPlayback()}else audio.pause();
 };
-$('btnNext').onclick=()=>{if(chunkIdx+1<chunks.length)selectChunk(chunkIdx+1,true)};
-$('btnPrev').onclick=()=>{if(audio.currentTime>5)audio.currentTime=0;else if(chunkIdx>0)selectChunk(chunkIdx-1,true)};
+$('btnNext').onclick=async()=>{if(chunkIdx+1<chunks.length){const w=!audio.paused;await selectChunk(chunkIdx+1);if(w&&secReady)startPlayback()}};
+$('btnPrev').onclick=async()=>{if(audio.currentTime>5){audio.currentTime=0;return}if(chunkIdx>0){const w=!audio.paused;await selectChunk(chunkIdx-1);if(w&&secReady)startPlayback()}};
 $('btnBack').onclick=()=>{audio.currentTime=Math.max(0,audio.currentTime-15)};
 function setSpeed(v){v=parseFloat(v);cfg.set('speed',String(v));audio.playbackRate=v;ansAudio.playbackRate=v;$('speed').value=String(v)}
 $('speed').onchange=e=>setSpeed(e.target.value);
@@ -506,20 +632,20 @@ function renderSteps(){
   else setStep(3,k.state==='warn'?'ok':'wait',k.state==='warn'?'✓':'…',k.msg||'Saved','Change…');
   const ready=hasPdf&&hasKey&&keyInfo.state!=='bad';
   const miss=[];if(!hasPdf)miss.push('step 1');if(!hasKey)miss.push('step 3');else if(keyInfo.state==='bad')miss.push('a valid key in step 3');
-  setStep(4,ready?'ready':'',ready?'✓':'4',ready?'Everything is set. Press Start, or Play below.':`Waiting for ${miss.join(' and ')}`);
+  setStep(4,ready?'ready':'',ready?'✓':'4',ready?'Everything is set. Start generates the current section, then plays it.':`Waiting for ${miss.join(' and ')}`);
   $('b4').disabled=!ready;
 }
 $('b1').onclick=()=>$('pdfFile').click();
 $('b2').onclick=()=>$('refFile').click();
 $('b3').onclick=()=>{$('btnSettings').click();setTimeout(()=>$('key').focus(),50)};
-$('b4').onclick=()=>{$('btnPlay').click()};
+$('b4').onclick=()=>{if(secReady)startPlayback();else generate(chunkIdx,true)};
 
 // ---------- Settings & init ----------
-$('btnSettings').onclick=()=>{$('key').value=cfg.get('key','');$('voice').value=cfg.get('voice','Kore');$('model').value=cfg.get('model','gemini-flash-latest');$('ttsModel').value=cfg.get('ttsModel','gemini-3.8-flash-tts');$('chunkPages').value=cfg.get('chunkPages','3');$('dlg').showModal()};
+$('btnSettings').onclick=()=>{$('key').value=cfg.get('key','');$('voice').value=cfg.get('voice','Kore');$('model').value=cfg.get('model','gemini-flash-latest');$('ttsModel').value=cfg.get('ttsModel','gemini-3.8-flash-tts');$('chunkPages').value=cfg.get('chunkPages','3');$('prefetchOn').value=cfg.get('prefetch','1');$('dlg').showModal()};
 $('dlg').addEventListener('close',()=>{
   if($('dlg').returnValue!=='ok')return;
   cfg.set('key',$('key').value.trim());cfg.set('voice',$('voice').value);cfg.set('model',$('model').value.trim());cfg.set('ttsModel',$('ttsModel').value.trim());
-  const old=cfg.get('chunkPages','3');cfg.set('chunkPages',$('chunkPages').value);if(old!==$('chunkPages').value){buildChunks();chunkIdx=0;markCurrent()}
+  cfg.set('prefetch',$('prefetchOn').value);const old=cfg.get('chunkPages','3');cfg.set('chunkPages',$('chunkPages').value);if(old!==$('chunkPages').value){cancelAll();audio.pause();buildChunks();chunkIdx=0;markCurrent();loadSection(0)}
   status('Settings saved.');checkKey();
 });
 $('btnClear').onclick=async()=>{if(confirm('Delete all saved lectures and audio on this device?')){await DB.clearPrefix('script:');await DB.clearPrefix('prog:');buildChunks();status('Cleared.')}};
@@ -528,7 +654,7 @@ $('btnPdf2').onclick=()=>$('pdfFile').click();
 $('pdfFile').onchange=async e=>{const f=e.target.files[0];if(!f)return;status('Loading PDF…');const buf=await f.arrayBuffer();try{await loadPdfData(buf);await DB.set('pdf',buf);pdfName=f.name;await DB.set('pdfname',f.name);status('')}catch(err){status('That file could not be opened as a PDF.',true)}renderSteps()};
 $('pPrev').onclick=()=>{$('follow').checked=false;showPage(viewPage-1)};
 $('pNext').onclick=()=>{$('follow').checked=false;showPage(viewPage+1)};
-$('chapter').onchange=e=>{if(!DATA.chapters.length)return;genToken++;audio.pause();chapIdx=+e.target.value;chunkIdx=0;buildChunks();markCurrent();saveProgress();curScript=null;$('script').innerHTML='<p style="color:var(--mute)">Press Play to start this chapter.</p>';if(pdf)showPage(DATA.chapters[chapIdx].start)};
+$('chapter').onchange=async e=>{if(!DATA.chapters.length)return;cancelAll();audio.pause();chapIdx=+e.target.value;chunkIdx=0;buildChunks();markCurrent();saveProgress();if(pdf)showPage(DATA.chapters[chapIdx].start);await loadSection(0)};
 
 $('refFile').onchange=async e=>{const f=e.target.files[0];if(!f)return;status('Reading archive text…');
   const pages=parseArchive(await f.text());
