@@ -77,6 +77,16 @@ small.hint{color:var(--mute)}
 #progIdle,#progBg{font-size:12px;color:var(--mute)}
 .prow{display:flex;gap:8px}
 #script .empty{color:var(--mute)}
+#scriptwrap{flex:1;min-height:0;position:relative;display:flex;flex-direction:column}
+#script{position:relative;min-height:0}
+#btnSync{position:absolute;top:8px;right:20px;z-index:2;width:30px;height:30px;padding:0;border-radius:50%;display:grid;place-items:center;color:var(--mute);background:var(--panel);border:1px solid var(--line);opacity:.8}
+#btnSync:hover,#btnSync:focus-visible{opacity:1;border-color:var(--acc)}
+#btnSync.on{color:var(--acc);border-color:var(--acc);opacity:1}
+#btnSync:not(.on)::after{content:"";position:absolute;width:22px;height:2px;border-radius:1px;background:var(--mute);transform:rotate(-45deg)}
+#script.seekable p[data-k]{cursor:pointer}
+#script.seekable p[data-k]:hover{background:var(--acc2)}
+#script.seekable p.now:hover{background:var(--hl)}
+#script p:focus-visible{outline:2px solid var(--acc)}
 #steps{display:flex;gap:8px;padding:8px 12px;border-bottom:1px solid var(--line);background:var(--bg);flex-wrap:wrap}
 .step{flex:1 1 210px;display:flex;gap:10px;align-items:center;border:1px solid var(--line);border-radius:10px;padding:7px 10px;min-width:0;background:var(--panel)}
 .step .ico{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-size:13px;font-weight:700;border:2px solid var(--line);color:var(--mute);flex:none}
@@ -163,7 +173,10 @@ small.hint{color:var(--mute)}
       </div>
       <div id="progBg"></div>
     </div>
-    <div id="script"><p style="color:var(--mute)">Load your PDF and add your API key (steps above), then pick a section and press <b>Generate lecture</b>.</p></div>
+    <div id="scriptwrap">
+      <div id="script"><p style="color:var(--mute)">Load your PDF and add your API key (steps above), then pick a section and press <b>Generate lecture</b>.</p></div>
+      <button id="btnSync" class="on" aria-pressed="true" title="Scrolling follows the voice. Scroll yourself to turn this off."><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="3.5"/><path d="M12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4"/></svg></button>
+    </div>
     <div id="qa">
       <div id="log"></div>
       <div id="askrow">
@@ -203,6 +216,8 @@ small.hint{color:var(--mute)}
       <option value="gemini-2.5-flash-preview-tts">Gemini 2.5 Flash TTS (preview)</option>
       <option value="gemini-2.5-pro-preview-tts">Gemini 2.5 Pro TTS (preview)</option>
     </select>
+    <label>Lecture style</label>
+    <select id="detail"><option value="concise">Concise: key points only (recommended)</option><option value="standard">Standard: covers everything on the page</option></select>
     <small class="hint">If the chosen model is busy or slow, the app tries the others automatically.</small>
     <label>Pages per section</label>
     <select id="chunkPages"><option value="2">2 pages</option><option value="3" selected>3 pages</option><option value="4">4 pages</option></select>
@@ -232,7 +247,7 @@ const DB=(()=>{let p;const open=()=>p||(p=new Promise((res,rej)=>{try{const r=in
 
 // ---------- State ----------
 let DATA={chapters:[],ref:{}},pdf=null,chapIdx=0,chunkIdx=0,chunks=[],curScript=null,audio=$('audio')||new Audio(),ansAudio=new Audio();
-let pdfName='',refInfo={state:'none',name:'',msg:''},keyInfo={state:'none',msg:''},genToken=0,viewPage=0,paraWeights=[],prefetching=new Set(),qaHistory=[],busy=false;
+let pdfName='',refInfo={state:'none',name:'',msg:''},keyInfo={state:'none',msg:''},genToken=0,viewPage=0,paraFrac=[],paraTimes=[],curSegs=null,lastK=-1,syncScroll=true,prefetching=new Set(),qaHistory=[],busy=false;
 audio.preservesPitch=true;ansAudio.preservesPitch=true;
 const status=(m,err)=>{$('status').textContent=m||'';$('status').className=err?'err':''};window.status_=status;
 
@@ -304,7 +319,7 @@ async function pageImage(n){ // JPEG base64 for Gemini
 // ---------- Chapters / chunks ----------
 function buildChunks(){
   const ch=DATA.chapters[chapIdx];if(!ch){chunks=[];return}const per=parseInt(cfg.get('chunkPages','3'));chunks=[];
-  for(let p=ch.start,i=0;p<=ch.end;p+=per,i++){const pages=[];for(let q=p;q<Math.min(p+per,ch.end+1);q++)pages.push(q);chunks.push({i,pages,key:`ch${ch.n}_p${pages[0]}-${pages[pages.length-1]}`})}
+  for(let p=ch.start,i=0;p<=ch.end;p+=per,i++){const pages=[];for(let q=p;q<Math.min(p+per,ch.end+1);q++)pages.push(q);chunks.push({i,pages,key:`ch${ch.n}_p${pages[0]}-${pages[pages.length-1]}${cfg.get('detail','concise')==='standard'?'':'_concise'}`})}
   $('chapInfo').textContent=`PDF pages ${ch.start}–${ch.end} · ${chunks.length} sections`;
   const box=$('chunks');box.innerHTML='';
   chunks.forEach(c=>{const b=document.createElement('button');b.textContent=`pp. ${c.pages[0]}–${c.pages[c.pages.length-1]}`;b.onclick=()=>selectChunk(c.i);b.dataset.i=c.i;box.appendChild(b);
@@ -325,9 +340,9 @@ async function loadSection(i){
   if(rec&&rec.script&&rec.audio){
     curScript=rec.script;renderScript(rec.script);
     if(curUrl)URL.revokeObjectURL(curUrl);curUrl=URL.createObjectURL(rec.audio);
-    audio.src=curUrl;audio.playbackRate=parseFloat(cfg.get('speed','1'));secReady=true;status('');
+    curSegs=rec.segs||null;audio.src=curUrl;audio.playbackRate=parseFloat(cfg.get('speed','1'));secReady=true;status('');
   }else{
-    secReady=false;curScript=null;paraWeights=[];audio.removeAttribute('src');audio.load();
+    secReady=false;curScript=null;paraFrac=[];paraTimes=[];curSegs=null;lastK=-1;audio.removeAttribute('src');audio.load();
     $('time').textContent='0:00 / 0:00';$('seek').value=0;
     if(rec&&rec.script){renderScript(rec.script);status('The lecture text is saved, but the voice is not recorded yet. Press Generate lecture to finish it.')}
     else{status('');$('script').innerHTML=`<p class="empty">Section ${secLabel(i)} has not been generated yet. Press <b>Generate lecture</b>. The first time takes a few minutes; after that it is saved on this device.</p>`}
@@ -343,8 +358,9 @@ const SESSION_PREF={text:null,tts:null};
 const FALLBACK_TTS=['gemini-3.8-flash-tts','gemini-3.1-flash-tts-preview','gemini-2.5-flash-preview-tts','gemini-3.8-flash-lite-tts','gemini-2.5-pro-preview-tts'];
 async function gem(model,body,rounds=4,ctl=null){
   const key=cfg.get('key','');if(!key)throw new Error('Add your Gemini API key in Settings first.');
-  const pool=FALLBACK_TTS.includes(model)||/tts/.test(model)?FALLBACK_TTS:FALLBACK_TEXT;
-  const kind=pool===FALLBACK_TTS?'tts':'text';
+  const pool=(ctl&&ctl.pool)||(FALLBACK_TTS.includes(model)||/tts/.test(model)?FALLBACK_TTS:FALLBACK_TEXT);
+  const kind=(ctl&&ctl.kind)||(pool===FALLBACK_TTS?'tts':'text');
+  const TMO=(ctl&&ctl.timeoutMs)||MODEL_TIMEOUT_MS;
   const first=SESSION_PREF[kind]||model;
   const models=[first].concat([model].concat(pool).filter((m,ix,arr)=>m!==first&&arr.indexOf(m)===ix));
   let last;
@@ -353,10 +369,10 @@ async function gem(model,body,rounds=4,ctl=null){
       const m=models[k];chk(ctl);
       let r;
       if(ctl&&ctl.using)ctl.using(m);
-      const to=new AbortController(),tm=setTimeout(()=>to.abort(),MODEL_TIMEOUT_MS),onAb=()=>to.abort();
+      const to=new AbortController(),tm=setTimeout(()=>to.abort(),TMO),onAb=()=>to.abort();
       if(ctl)ctl.ac.signal.addEventListener('abort',onAb,{once:true});
       try{r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`,{method:'POST',signal:to.signal,headers:{'Content-Type':'application/json','x-goog-api-key':key},body:JSON.stringify(body)})}
-      catch(e){clearTimeout(tm);chk(ctl);const slow=to.signal.aborted;const why=slow?`did not answer within ${MODEL_TIMEOUT_MS/1000} seconds`:'could not be reached (it is probably overloaded)';last=new Error(`${m} ${why}`);if(ctl)ctl.note(`${m} ${why}. Trying another model…`);continue}
+      catch(e){clearTimeout(tm);chk(ctl);const slow=to.signal.aborted;const why=slow?`did not answer within ${TMO/1000} seconds`:'could not be reached (it is probably overloaded)';last=new Error(`${m} ${why}`);if(ctl)ctl.note(`${m} ${why}. Trying another model…`);continue}
       clearTimeout(tm);if(ctl)ctl.ac.signal.removeEventListener('abort',onAb);
       if(r.ok){SESSION_PREF[kind]=m;return r.json()}
       const t=await r.text();last=new Error(`Gemini ${r.status}: ${t.slice(0,200)}`);
@@ -371,16 +387,17 @@ async function gem(model,body,rounds=4,ctl=null){
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const textOf=r=>((r.candidates&&r.candidates[0]&&r.candidates[0].content&&r.candidates[0].content.parts)||[]).filter(p=>!p.thought).map(p=>p.text||'').join('').trim();
 
-const LECTURE_STYLE="You are a warm, rigorous university physics instructor giving a spoken lecture to one student who is studying the attached textbook pages. "+
-"Teach the content of the pages IN YOUR OWN WORDS, in the same order as the pages, covering every idea, definition, derivation step, equation, worked example and figure. Do not quote the book verbatim; explain it as a teacher would. "+
-"Say every equation naturally in spoken English (for example 'x squared over two', 'the integral from zero to infinity of'), and name the symbols. Describe figures briefly and say what they show. Skip page numbers, running headers and figure numbers' layout details. "+
-"Output spoken plain text only: no markdown, no LaTeX, no bullet points, no stage directions. Use short paragraphs separated by blank lines.";
+const LECTURE_BASE="You are a warm, rigorous university physics instructor giving a spoken lecture to one student who is studying the attached textbook pages. Teach the content IN YOUR OWN WORDS, in the same order as the pages. Do not quote the book verbatim. ";
+const LECTURE_STANDARD="Cover every idea, definition, derivation step, equation, worked example and figure. Describe figures briefly and say what they show. Skip page numbers and running headers. ";
+const LECTURE_CONCISE="Be concise: this is a study aid, not a dictation. Focus on the key information the student must understand and remember: core definitions, the main results, the reasoning that connects them, and the important equations. Leave out filler, repetition, historical asides, and the arithmetic inside examples (give the setup and the result). Mention a figure only when it carries a key idea, in one short sentence. Aim for roughly one third of the words on the pages, in short plain sentences, and never announce what you are about to say. Skip page numbers and running headers. ";
+const LECTURE_SPEECH="Say every equation naturally in spoken English (for example 'x squared over two', 'the integral from zero to infinity of') and name the symbols. Output spoken plain text only: no markdown, no LaTeX, no bullet points, no stage directions. Use short paragraphs separated by blank lines.";
+const lectureStyle=()=>LECTURE_BASE+(cfg.get('detail','concise')==='concise'?LECTURE_CONCISE:LECTURE_STANDARD)+LECTURE_SPEECH;
 
 async function makeScript(ch,chunk,prevTail,ctl){
   const imgs=[];for(let k=0;k<chunk.pages.length;k++){chk(ctl);ctl.stage('read',k+1,chunk.pages.length);imgs.push(await pageImage(chunk.pages[k]))}
   const ref=chunk.pages.map(p=>`[Page ${p}]\n${DATA.ref[p]||''}`).join('\n\n');
   const intro=chunk.i===0?"This is the start of the chapter; open by briefly introducing it. ":"This continues a lecture already under way; do NOT greet or re-introduce. Continue smoothly. ";
-  const text=`${LECTURE_STYLE}\n\nBook: Berkeley Physics Course Vol. 1, Mechanics. Chapter ${ch.n}: ${ch.title}. ${intro}`+
+  const text=`${lectureStyle()}\n\nBook: Berkeley Physics Course Vol. 1, Mechanics. Chapter ${ch.n}: ${ch.title}. ${intro}`+
    (prevTail?`The previous section of the lecture ended with: "${prevTail}"\n`:'')+
    (ref.replace(/\[Page \d+\]|\s/g,'')?`\nBelow is a machine-readable text of these pages for reference. It is imperfect and its equations are missing, so rely on the page images for the mathematics and figures:\n${ref.slice(0,9000)}`:'\nRely on the page images for all text, mathematics and figures.');
   const parts=[{text}].concat(imgs.map(d=>({inline_data:{mime_type:'image/jpeg',data:d}})));
@@ -433,7 +450,7 @@ async function ensureChunk(i,ctl){
   ctl.script(rec.script);
   const segs=splitSegments(rec.script);const pcm=[];
   for(let s=0;s<segs.length;s++){chk(ctl);ctl.stage('voice',s+1,segs.length);pcm.push(await tts(segs[s],ctl))}
-  chk(ctl);rec.audio=pcmToWav(pcm);await DB.set(key,rec);
+  chk(ctl);rec.segs=segs.map((t,k)=>({chars:t.replace(/\s+/g,' ').length,sec:pcm[k].length/48000}));rec.audio=pcmToWav(pcm);await DB.set(key,rec);
   return rec;
 }
 
@@ -519,7 +536,7 @@ function updateButtons(){
   $('btnGen').disabled=active&&!here;
   $('btnGen').textContent=failedHere?'Try again':'Generate lecture';
   $('btnGen').title=(active&&!here)?'Another section is generating right now':'';
-  $('btnPlay').disabled=!secReady;
+  $('btnPlay').disabled=!secReady;$('script').classList.toggle('seekable',secReady);
 }
 $('btnGen').onclick=()=>generate(chunkIdx,false);
 $('btnCancel').onclick=()=>{cancelJob();renderProg();updateButtons();status('Cancelled.')};
@@ -528,9 +545,53 @@ $('btnRetry').onclick=()=>{const i=job.i,ap=job.autoplay;job=null;generate(i,ap)
 // ---------- Playback ----------
 function renderScript(text){
   const paras=text.split(/\n\s*\n/).map(s=>s.trim()).filter(Boolean);
-  const tot=paras.reduce((a,p)=>a+p.length,0)||1;let acc=0;paraWeights=paras.map(p=>{acc+=p.length;return acc/tot});
-  $('script').innerHTML='';paras.forEach(p=>{const e=document.createElement('p');e.textContent=p;$('script').appendChild(e)});
+  const lens=paras.map(p=>p.replace(/\s+/g,' ').length),tot=lens.reduce((a,b)=>a+b,0)||1;let acc=0;
+  paraFrac=lens.map(l=>{const f=acc/tot;acc+=l;return f});lastK=-1;
+  const sc=$('script'),same=sc.dataset.txt===text,keep=sc.scrollTop;sc.dataset.txt=text;
+  $('script').innerHTML='';
+  paras.forEach((p,k)=>{const e=document.createElement('p');e.textContent=p;e.dataset.k=k;e.tabIndex=0;e.title='Click to play from here';$('script').appendChild(e)});
+  sc.scrollTop=same?keep:0;
+  computeParaTimes();
 }
+function computeParaTimes(){
+  const d=audio.duration;
+  if(!paraFrac.length||!d||!isFinite(d)){paraTimes=[];return}
+  if(curSegs&&curSegs.length){
+    const C=curSegs.reduce((a,s)=>a+s.chars,0)||1,T=curSegs.reduce((a,s)=>a+s.sec,0)||d,sc=d/T;
+    paraTimes=paraFrac.map(f=>{let x=f*C,t=0;for(const g of curSegs){if(x<=g.chars){t+=g.sec*(x/Math.max(1,g.chars));break}x-=g.chars;t+=g.sec}return t*sc});
+  }else paraTimes=paraFrac.map(f=>f*d);
+}
+function curParaIndex(){const t=audio.currentTime;let k=0;for(let j=0;j<paraTimes.length;j++){if(paraTimes[j]<=t+0.05)k=j;else break}return k}
+function seekToPara(k){
+  if(!secReady||!paraTimes.length||paraTimes[k]===undefined)return;
+  audio.currentTime=paraTimes[k];lastK=-1;
+  if(!syncScroll)setSync(true,false);
+  if(audio.paused)startPlayback();
+}
+function scrollToCurrent(smooth){
+  const c=$('script'),k=lastK>=0?lastK:curParaIndex(),p=c.children[k];
+  if(!p||p.dataset.k===undefined)return;
+  const top=p.offsetTop-c.scrollTop,h=c.clientHeight;
+  if(top>=h*0.08&&top+p.offsetHeight<=h*0.8)return;
+  c.scrollTo({top:Math.max(0,p.offsetTop-h*0.2),behavior:smooth?'smooth':'auto'});
+}
+function setSync(on,jump=true){
+  syncScroll=on;const b=$('btnSync');b.classList.toggle('on',on);b.setAttribute('aria-pressed',String(on));
+  b.title=on?'Scrolling follows the voice. Scroll yourself to turn this off.':'Scrolling is free. Click to follow the voice again.';
+  if(on&&jump)scrollToCurrent(true);
+}
+$('btnSync').onclick=()=>setSync(!syncScroll);
+const userScrolled=()=>{if(syncScroll)setSync(false)};
+$('script').addEventListener('wheel',userScrolled,{passive:true});
+$('script').addEventListener('touchmove',userScrolled,{passive:true});
+$('script').addEventListener('keydown',e=>{if(['ArrowUp','ArrowDown','PageUp','PageDown','Home','End'].includes(e.key))userScrolled()});
+$('script').addEventListener('pointerdown',e=>{if(e.target===$('script'))userScrolled()});
+$('script').addEventListener('click',e=>{
+  const p=e.target.closest('p[data-k]');if(!p)return;
+  const sel=window.getSelection&&window.getSelection().toString();if(sel)return;
+  seekToPara(+p.dataset.k);
+});
+$('script').addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){const p=e.target.closest&&e.target.closest('p[data-k]');if(p){e.preventDefault();e.stopPropagation();seekToPara(+p.dataset.k)}}});
 function fmt(s){if(!isFinite(s))s=0;s=Math.floor(s);return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')}
 function setPlayLabel(){$('btnPlay').textContent=(!audio.paused&&!audio.ended)?'⏸ Pause':'▶ Play'}
 async function startPlayback(){
@@ -542,13 +603,13 @@ async function startPlayback(){
 audio.addEventListener('timeupdate',()=>{
   const d=audio.duration||0,t=audio.currentTime;$('time').textContent=fmt(t)+' / '+fmt(d);
   if(d)$('seek').value=Math.round(t/d*1000);
-  if(d&&paraWeights.length){const f=t/d;let k=paraWeights.findIndex(w=>f<=w);if(k<0)k=paraWeights.length-1;
-    const ps=$('script').children;[...ps].forEach((p,j)=>p.classList.toggle('now',j===k));
-    if(ps[k]&&!audio.paused)ps[k].scrollIntoView({block:'nearest',behavior:'smooth'})}
+  if(d&&paraTimes.length){const k=curParaIndex();
+    if(k!==lastK){lastK=k;const ps=$('script').children;[...ps].forEach((p,j)=>p.classList.toggle('now',j===k));
+      if(syncScroll&&!audio.paused)scrollToCurrent(true)}}
   if(d&&$('follow').checked&&pdf&&chunks[chunkIdx]){const pg=chunks[chunkIdx].pages;const p=pg[Math.min(pg.length-1,Math.floor(t/d*pg.length))];if(p!==viewPage)showPage(p)}
 });
 audio.addEventListener('play',setPlayLabel);audio.addEventListener('pause',setPlayLabel);
-audio.addEventListener('loadedmetadata',()=>{$('time').textContent='0:00 / '+fmt(audio.duration)});
+audio.addEventListener('loadedmetadata',()=>{$('time').textContent='0:00 / '+fmt(audio.duration);computeParaTimes()});
 audio.addEventListener('ended',async()=>{setPlayLabel();
   DB.set('prog:'+chunks[chunkIdx].key,1);
   if(chunkIdx+1<chunks.length){await selectChunk(chunkIdx+1);if(secReady)startPlayback();else generate(chunkIdx,true)}
@@ -576,34 +637,53 @@ document.addEventListener('keydown',e=>{
 // ---------- Ask / Recap ----------
 function addLog(cls,text){const d=document.createElement('div');d.className=cls;d.textContent=text;$('log').appendChild(d);$('log').scrollTop=1e9;return d}
 function heardSoFar(){
-  if(!curScript)return '';const d=audio.duration||0,f=d?audio.currentTime/d:0;
-  const paras=curScript.split(/\n\s*\n/).filter(Boolean);let k=paraWeights.findIndex(w=>f<=w);if(k<0)k=paras.length-1;
-  return paras.slice(0,k+1).join('\n\n');
+  if(!curScript)return '';
+  const paras=curScript.split(/\n\s*\n/).map(s=>s.trim()).filter(Boolean);
+  return paras.slice(0,curParaIndex()+1).join('\n\n');
 }
 async function currentImages(){const ims=[];for(const p of (chunks[chunkIdx]||{pages:[]}).pages)ims.push(await pageImage(p));return ims}
 async function speak(text){
   if(!$('speakAns').checked)return;
-  try{const segs=splitSegments(text,1200);const pcm=[];for(const s of segs)pcm.push(await tts(s));
-    const url=URL.createObjectURL(pcmToWav(pcm));ansAudio.src=url;ansAudio.playbackRate=parseFloat(cfg.get('speed','1'));await ansAudio.play()}catch(e){status('Could not speak the answer: '+e.message,true)}
+  const ctl={cancelled:false,ac:new AbortController(),timeoutMs:60000,note(){},using(){}};
+  try{
+    status('Recording the spoken answer…');
+    const segs=splitSegments(text,1200);const pcm=[];for(const s of segs)pcm.push(await tts(s,ctl));
+    const url=URL.createObjectURL(pcmToWav(pcm));ansAudio.src=url;ansAudio.playbackRate=parseFloat(cfg.get('speed','1'));await ansAudio.play();status('');
+  }catch(e){status('Could not speak the answer: '+e.message,true)}
 }
+const QA_POOL=['gemini-3.6-flash','gemini-3.5-flash','gemini-4-hydrogen','gemini-3.8-flash','gemini-3.7-flash','gemini-flash-latest'];
+let askCtl=null;
 async function ask(question,mode){
   if(!pdf){status('Load the book PDF first.',true);return}
+  if(askCtl){askCtl.cancelled=true;askCtl.ac.abort()}
   audio.pause();ansAudio.pause();
   const label=mode==='recap'?'Recap of what I have heard so far':question;
-  addLog('q',label);const out=addLog('a','Thinking…');
+  addLog('q',label);
+  const out=addLog('a','');const txt=document.createElement('span'),stop=document.createElement('button');
+  stop.textContent='Stop';stop.style.cssText='margin-left:8px;padding:2px 8px;font-size:12px';out.append(txt,stop);
+  const ctl={cancelled:false,ac:new AbortController(),kind:'qa',pool:QA_POOL,timeoutMs:45000,note(){},using(){}};
+  askCtl=ctl;const t0=Date.now();let note='',using='',stage='Reading the pages';
+  ctl.note=m=>{note=m};ctl.using=m=>{using=m;stage='Waiting for Gemini'};
+  const draw=()=>{txt.textContent=`${stage}… ${mmss((Date.now()-t0)/1000)}`+(using?` · ${using}`:'')+(note?`\n${note}`:'');$('log').scrollTop=1e9};
+  const tick=setInterval(draw,500);draw();
+  stop.onclick=()=>{ctl.cancelled=true;ctl.ac.abort()};
   try{
-    const ch=DATA.chapters[chapIdx];const imgs=await currentImages();
+    const ch=DATA.chapters[chapIdx];const imgs=await currentImages();chk(ctl);
     let prior='';
     for(let j=0;j<chunkIdx;j++){const r=await DB.get('script:'+chunks[j].key);if(r&&r.script)prior+=r.script+'\n\n'}
     const heard=(prior+heardSoFar()).slice(-14000);
-    const sys=`You are a warm, rigorous physics instructor tutoring one student who is listening to a spoken lecture on Berkeley Physics Course Vol. 1 (Mechanics), Chapter ${ch.n}: ${ch.title}. The attached images are the textbook pages being covered right now. Answer clearly and concisely (under 200 words unless a derivation needs more) in plain spoken English: no markdown, no LaTeX; say equations in words. Be accurate; if the question goes beyond the pages, say so and still help.`;
-    const task=mode==='recap'?'Give a concise recap (about 6 to 8 sentences) of what has been covered so far in this lecture, highlighting key definitions and equations in words, and finish with what the student should be ready to hear next.':question;
+    const sys=`You are a warm, rigorous physics instructor tutoring one student who is listening to a spoken lecture on Berkeley Physics Course Vol. 1 (Mechanics), Chapter ${ch.n}: ${ch.title}. The attached images are the textbook pages being covered right now. Answer clearly and concisely (under 150 words unless a derivation needs more) in plain spoken English: no markdown, no LaTeX; say equations in words. Be accurate; if the question goes beyond the pages, say so and still help.`;
+    const task=mode==='recap'?'Give a concise recap (about 5 to 7 sentences) of what has been covered so far in this lecture, highlighting key definitions and equations in words, and finish with what the student should be ready to hear next.':question;
     const hist=qaHistory.slice(-4).map(h=>`Student: ${h.q}\nInstructor: ${h.a}`).join('\n\n');
     const parts=[{text:`${sys}\n\nLecture heard so far:\n"""\n${heard}\n"""\n\n${hist?'Earlier questions this session:\n'+hist+'\n\n':''}${mode==='recap'?'Task':'Student question'}: ${task}`}].concat(imgs.map(d=>({inline_data:{mime_type:'image/jpeg',data:d}})));
-    const r=await gem(TEXT_MODEL(),{contents:[{parts}],generationConfig:{maxOutputTokens:2048}});
-    const ans=textOf(r)||'(No answer returned.)';out.textContent=ans;qaHistory.push({q:label,a:ans});
+    const r=await gem(QA_POOL[0],{contents:[{parts}],generationConfig:{maxOutputTokens:8192}},2,ctl);
+    clearInterval(tick);
+    const ans=textOf(r);
+    if(!ans){out.textContent='Gemini returned no answer text. Please try asking again.';out.style.color='var(--err)';return}
+    out.textContent=ans;qaHistory.push({q:label,a:ans});
     await speak(ans);
-  }catch(e){out.textContent=e.message;out.style.color='var(--err)'}
+  }catch(e){clearInterval(tick);out.textContent=ctl.cancelled?'Stopped.':('Could not get an answer: '+(e.message||e));if(!ctl.cancelled)out.style.color='var(--err)'}
+  finally{clearInterval(tick);if(askCtl===ctl)askCtl=null}
 }
 $('btnAsk').onclick=()=>{const q=$('q').value.trim();if(q){$('q').value='';ask(q,'ask')}};
 $('q').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();$('btnAsk').click()}});
@@ -668,11 +748,13 @@ $('b3').onclick=()=>{$('btnSettings').click();setTimeout(()=>$('key').focus(),50
 $('b4').onclick=()=>{if(secReady)startPlayback();else generate(chunkIdx,true)};
 
 // ---------- Settings & init ----------
-$('btnSettings').onclick=()=>{$('key').value=cfg.get('key','');$('voice').value=cfg.get('voice','Kore');$('model').value=TEXT_MODEL();$('ttsModel').value=cfg.get('ttsModel','gemini-3.8-flash-tts');$('chunkPages').value=cfg.get('chunkPages','3');$('prefetchOn').value=cfg.get('prefetch','1');$('dlg').showModal()};
+$('btnSettings').onclick=()=>{$('key').value=cfg.get('key','');$('voice').value=cfg.get('voice','Kore');$('model').value=TEXT_MODEL();$('ttsModel').value=cfg.get('ttsModel','gemini-3.8-flash-tts');$('chunkPages').value=cfg.get('chunkPages','3');$('prefetchOn').value=cfg.get('prefetch','1');$('detail').value=cfg.get('detail','concise');$('dlg').showModal()};
 $('dlg').addEventListener('close',()=>{
   if($('dlg').returnValue!=='ok')return;
   cfg.set('key',$('key').value.trim());cfg.set('voice',$('voice').value);cfg.set('textModel',$('model').value);cfg.set('ttsModel',$('ttsModel').value);SESSION_PREF.text=SESSION_PREF.tts=null;
-  cfg.set('prefetch',$('prefetchOn').value);const old=cfg.get('chunkPages','3');cfg.set('chunkPages',$('chunkPages').value);if(old!==$('chunkPages').value){cancelAll();audio.pause();buildChunks();chunkIdx=0;markCurrent();loadSection(0)}
+  cfg.set('prefetch',$('prefetchOn').value);const old=cfg.get('chunkPages','3'),oldD=cfg.get('detail','concise');cfg.set('chunkPages',$('chunkPages').value);cfg.set('detail',$('detail').value);
+  if(old!==$('chunkPages').value){cancelAll();audio.pause();buildChunks();chunkIdx=0;markCurrent();loadSection(0)}
+  else if(oldD!==$('detail').value&&chunks[chunkIdx]){cancelAll();audio.pause();buildChunks();markCurrent();loadSection(chunkIdx)}
   status('Settings saved.');checkKey();
 });
 $('btnClear').onclick=async()=>{if(confirm('Delete all saved lectures and audio on this device?')){await DB.clearPrefix('script:');await DB.clearPrefix('prog:');buildChunks();status('Cleared.')}};
