@@ -5,14 +5,36 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Physics Lecturer</title>
 <style>
-:root{--bg:#f6f5f1;--panel:#fff;--ink:#1c1b19;--mute:#6b6963;--line:#dedbd3;--acc:#2f5d8a;--acc2:#e8eff6;--hl:#fff2c4;--err:#b3261e;--ok:#2e7d4f;--on-acc:#fff}
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#161615;--panel:#212120;--ink:#ecebe6;--mute:#9a978f;--line:#363532;--acc:#7fb0e0;--acc2:#27323d;--hl:#4a3f16;--err:#ff8a80;--ok:#5fbf86;--on-acc:#0d1b2a}}
-:root[data-theme="dark"]{--bg:#161615;--panel:#212120;--ink:#ecebe6;--mute:#9a978f;--line:#363532;--acc:#7fb0e0;--acc2:#27323d;--hl:#4a3f16;--err:#ff8a80;--ok:#5fbf86;--on-acc:#0d1b2a}
+:root{--bg:#f6f5f1;--panel:#fff;--ink:#1c1b19;--mute:#6b6963;--line:#dedbd3;--acc:#2f5d8a;--acc2:#e8eff6;--hl:#fff2c4;--err:#b3261e;--ok:#2e7d4f;--on-acc:#fff;--warn:#c77d00}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#161615;--panel:#212120;--ink:#ecebe6;--mute:#9a978f;--line:#363532;--acc:#7fb0e0;--acc2:#27323d;--hl:#4a3f16;--err:#ff8a80;--ok:#5fbf86;--on-acc:#0d1b2a;--warn:#f0b43c}}
+:root[data-theme="dark"]{--bg:#161615;--panel:#212120;--ink:#ecebe6;--mute:#9a978f;--line:#363532;--acc:#7fb0e0;--acc2:#27323d;--hl:#4a3f16;--err:#ff8a80;--ok:#5fbf86;--on-acc:#0d1b2a;--warn:#f0b43c}
 *{box-sizing:border-box}
 html,body{height:100%;margin:0}
 body{background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;display:flex;flex-direction:column}
-header{display:flex;align-items:center;gap:12px;padding:8px 16px;border-bottom:1px solid var(--line);background:var(--panel)}
-header h1{font-size:16px;margin:0;font-weight:600}
+header{display:flex;align-items:center;gap:8px;padding:5px 12px;border-bottom:1px solid var(--line);background:var(--panel)}
+header h1{font-size:15px;margin:0 6px 0 0;font-weight:700;letter-spacing:-.01em;white-space:nowrap}
+#bookSel{min-width:130px;max-width:min(380px,46vw);border:1px solid transparent;background:var(--bg);font-weight:600;padding:5px 10px;border-radius:10px;text-overflow:ellipsis}
+#bookSel:hover{border-color:var(--line)}
+.hbtn{display:inline-flex;gap:6px;align-items:center;border:0;background:var(--bg);border-radius:10px;padding:6px 11px;font-size:13px;color:var(--ink);position:relative}
+.hbtn:hover{border:0;filter:brightness(.97)}
+.hbtn svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--warn);display:inline-block;flex:none}
+#btnSettings{position:relative}
+#btnSettings .dot{position:absolute;top:5px;right:5px}
+button.danger{color:var(--err)}
+#pbar{display:flex;align-items:center;justify-content:center;gap:4px;padding:2px 8px;border-top:1px solid var(--line);background:var(--panel);font-size:12px;color:var(--mute);min-height:30px}
+#pbar #pLabel{min-width:150px;text-align:center;font-variant-numeric:tabular-nums}
+.ib.sm{width:26px;height:26px}
+.ib.sm svg{width:16px;height:16px}
+#btnFollow{position:relative;color:var(--mute);margin-left:8px}
+#btnFollow.on{color:var(--acc)}
+#btnFollow:not(.on)::after{content:"";position:absolute;width:18px;height:2px;border-radius:1px;background:var(--mute);transform:rotate(-45deg)}
+#keyStatus.good{color:var(--ok)}
+#keyStatus.bad{color:var(--err)}
+#bookDlg .step{flex:none;margin:8px 0}
+#bookDlg p button.primary{margin-left:auto}
+#bookDlg input{width:100%}
+#bookNote{display:block;margin:4px 0;color:var(--warn)}
 header .sp{flex:1}
 button,select,input,textarea{font:inherit;color:inherit}
 button{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 12px;cursor:pointer}
@@ -121,7 +143,6 @@ small.hint{color:var(--mute)}
 #script.seekable p[data-k]:hover{background:var(--acc2)}
 #script.seekable p.now:hover{background:var(--hl)}
 #script p:focus-visible{outline:2px solid var(--acc)}
-#steps{display:flex;gap:8px;padding:8px 12px;border-bottom:1px solid var(--line);background:var(--bg);flex-wrap:wrap}
 .step{flex:1 1 210px;display:flex;gap:10px;align-items:center;border:1px solid var(--line);border-radius:10px;padding:7px 10px;min-width:0;background:var(--panel)}
 .step .ico{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-size:13px;font-weight:700;border:2px solid var(--line);color:var(--mute);flex:none}
 .step.ok .ico{background:var(--ok);border-color:var(--ok);color:#fff}
@@ -140,34 +161,26 @@ small.hint{color:var(--mute)}
 </head>
 <body>
 <header>
-  <h1>Physics Lecturer</h1>
-  <small class="hint" id="booktitle">Berkeley Physics Course, Vol. 1: Mechanics</small>
+  <h1>Book Voice</h1>
+  <select id="bookSel" aria-label="Book" title="Choose a book"></select>
+  <button id="btnBook" class="hbtn" title="Book setup: PDF, archive text, page numbers"><svg viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h13v15H6a2 2 0 0 0-2 2V5z"/><path d="M4 20a2 2 0 0 1 2-2h13"/></svg>Book setup<i class="dot" id="dotBook" hidden></i></button>
   <span class="sp"></span>
-  <button id="btnSettings">Settings</button>
+  <button id="btnSettings" class="ib" title="Settings: API key, models, voice" aria-label="Settings"><svg viewBox="0 0 24 24"><line x1="4" y1="7" x2="20" y2="7"/><circle cx="9" cy="7" r="2.2" fill="var(--panel)"/><line x1="4" y1="17" x2="20" y2="17"/><circle cx="15" cy="17" r="2.2" fill="var(--panel)"/></svg><i class="dot" id="dotSet" hidden></i></button>
 </header>
-<div id="steps">
-  <div class="step" id="st1"><span class="ico">1</span><div class="txt"><b>Textbook PDF</b><small id="d1"></small></div><button id="b1"></button></div>
-  <div class="step" id="st2"><span class="ico">2</span><div class="txt"><b>Archive text <span style="font-weight:400;color:var(--mute)">(optional)</span></b><small id="d2"></small></div><button id="b2"></button></div>
-  <div class="step" id="st3"><span class="ico">3</span><div class="txt"><b>Gemini API key</b><small id="d3"></small></div><button id="b3"></button></div>
-  <div class="step go" id="st4"><span class="ico">4</span><div class="txt"><b>Go</b><small id="d4"></small></div><button id="b4" class="primary">Start lecture</button></div>
-</div>
 <main>
   <section class="pane" id="left">
-    <div class="bar">
-      <button id="pPrev">‹</button>
-      <span id="pLabel">Page –</span>
-      <button id="pNext">›</button>
-      <label style="display:flex;gap:4px;align-items:center;font-size:13px"><input type="checkbox" id="follow" checked> follow lecture</label>
-      <span style="flex:1"></span>
-      <input type="file" id="pdfFile" accept="application/pdf" hidden>
-      <input type="file" id="refFile" accept=".xml,.txt" hidden>
-    </div>
     <div id="pdfwrap">
       <div id="empty">
-        <p><b>Start with step 1 above.</b> Load the textbook PDF. It stays in your browser; it is never uploaded anywhere except as page images sent to Gemini when a lecture is generated.</p>
-        <p><button class="primary" id="btnPdf2">Choose PDF…</button></p>
-        <p style="font-size:13px">Step 2 is optional: the book's <b>DjVu XML</b> file from its archive.org page (under “Download options”) gives the lecturer cleaner text than a scan.</p>
+        <p><b>No book open.</b> Use <b>Book setup</b> to add a textbook PDF. It stays in your browser; it is never uploaded anywhere except as page images sent to Gemini when a lecture is generated.</p>
+        <p><button class="primary" id="btnPdf2">Book setup…</button></p>
       </div>
+    </div>
+    <div id="pbar">
+      <button id="pPrev" class="ib sm" title="Previous page" aria-label="Previous page"><svg viewBox="0 0 24 24"><polyline points="15 6 9 12 15 18"/></svg></button>
+      <span id="pLabel">No page</span>
+      <button id="pNext" class="ib sm" title="Next page" aria-label="Next page"><svg viewBox="0 0 24 24"><polyline points="9 6 15 12 9 18"/></svg></button>
+      <input type="checkbox" id="follow" checked hidden>
+      <button id="btnFollow" class="ib sm on" aria-pressed="true" title="The page follows the lecture. Click to turn off." aria-label="Page follows the lecture"><svg viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg></button>
     </div>
   </section>
   <div id="split" role="separator" aria-orientation="vertical" aria-label="Resize panels" tabindex="0" title="Drag to resize · double-click to reset"></div>
@@ -212,7 +225,7 @@ small.hint{color:var(--mute)}
       <button id="btnSync" class="on" aria-pressed="true" title="Scrolling follows the voice. Scroll yourself to turn this off."><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="3.5"/><path d="M12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4"/></svg></button>
     </div>
     <div id="scriptwrap">
-      <div id="script"><p style="color:var(--mute)">Load your PDF and add your API key (steps above), then pick a section and press <b>Generate lecture</b>.</p></div>
+      <div id="script"><p style="color:var(--mute)">Add your API key in Settings and a book in Book setup, then pick a section and press <b>Generate lecture</b>.</p></div>
       <div id="booktext" hidden></div>
     </div>
     <div id="qa">
@@ -227,11 +240,31 @@ small.hint{color:var(--mute)}
   </section>
 </main>
 
+<input type="file" id="pdfFile" accept="application/pdf" hidden>
+<input type="file" id="refFile" accept=".xml,.txt" hidden>
+<dialog id="bookDlg">
+  <form method="dialog">
+    <h3 id="bookDlgTitle" style="margin:0 0 4px">Book setup</h3>
+    <small class="hint" id="bookNote" hidden></small>
+    <label for="bookName">Book name</label>
+    <input type="text" id="bookName" autocomplete="off" placeholder="For example: Mechanics (Berkeley Physics Course, vol. 1)">
+    <div class="step" id="st1"><span class="ico">1</span><div class="txt"><b>Textbook PDF</b><small id="d1"></small></div><button type="button" id="b1"></button></div>
+    <div class="step" id="st2"><span class="ico">2</span><div class="txt"><b>Archive text <span style="font-weight:400;color:var(--mute)">(optional)</span></b><small id="d2"></small></div><button type="button" id="b2"></button></div>
+    <small class="hint">The archive text is the book's <b>DjVu XML</b> file from its archive.org page (Download options). It gives cleaner text than a scan, and lets the app show printed page numbers.</small>
+    <label for="pageOffset">Printed page number = PDF page minus … (leave empty for automatic)</label>
+    <input type="text" id="pageOffset" inputmode="numeric" placeholder="automatic">
+    <p style="display:flex;gap:8px;justify-content:space-between;margin-top:16px">
+      <button type="button" id="btnDelBook" class="danger">Delete this book</button>
+      <button class="primary" value="ok">Done</button>
+    </p>
+  </form>
+</dialog>
 <dialog id="dlg">
   <form method="dialog">
     <h3 style="margin:0 0 4px">Settings</h3>
     <label for="key">Gemini API key</label>
     <input type="text" id="key" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="Paste your key here (starts with AIza… or AQ.…)">
+    <small id="keyStatus" class="hint"></small>
     <ol class="howto">
       <li>Open <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio: API keys</a> and sign in with a Google account.</li>
       <li>Click <b>Create API key</b> and pick a Google Cloud project (a new one is fine).</li>
@@ -263,8 +296,6 @@ small.hint{color:var(--mute)}
     <small class="hint">If the chosen model is busy or slow, the app tries the others automatically.</small>
     <label>Pages per section</label>
     <select id="chunkPages"><option value="2">2 pages</option><option value="3" selected>3 pages</option><option value="4">4 pages</option></select>
-    <label>Printed page number = PDF page minus … (leave empty for automatic)</label>
-    <input type="text" id="pageOffset" inputmode="numeric" placeholder="automatic">
     <label>Prepare the next section while one is playing</label>
     <select id="prefetchOn"><option value="1">Yes</option><option value="0">No (uses less of your API quota)</option></select>
     <p style="display:flex;gap:8px;justify-content:space-between;margin-top:16px">
@@ -291,9 +322,82 @@ const DB=(()=>{let p;const open=()=>p||(p=new Promise((res,rej)=>{try{const r=in
 
 // ---------- State ----------
 let DATA={chapters:[],ref:{}},pdf=null,chapIdx=0,chunkIdx=0,chunks=[],curScript=null,audio=$('audio')||new Audio(),ansAudio=new Audio();
-let pdfName='',refInfo={state:'none',name:'',msg:''},keyInfo={state:'none',msg:''},genToken=0,viewPage=0,paraFrac=[],paraTimes=[],curSegs=null,lastK=-1,syncScroll=true,autoOffset=null,prefetching=new Set(),qaHistory=[],busy=false;
+let books=[],book=null,pendingRoute=null,dlgNew=false,hintSlug='',firstRunChain=false,refInfo={state:'none',name:'',msg:''},keyInfo={state:'none',msg:''},genToken=0,viewPage=0,paraFrac=[],paraTimes=[],curSegs=null,lastK=-1,syncScroll=true,autoOffset=null,prefetching=new Set(),qaHistory=[],busy=false;
 audio.preservesPitch=true;ansAudio.preservesPitch=true;
 const status=(m,err)=>{$('status').textContent=m||'';$('status').className=err?'err':''};window.status_=status;
+
+// ---------- Books (library) ----------
+const rid=()=>'b'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+function loadBooks(){try{books=JSON.parse(cfg.get('books','[]'))||[]}catch(e){books=[]}}
+function saveBooks(){cfg.set('books',JSON.stringify(books))}
+const bk=k=>`book:${book.id}:${k}`;
+const skey=c=>'script:'+(book&&!book.legacy?book.id+':':'')+c.key;
+const slugify=t=>(t||'book').toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,60)||'book';
+function uniqueSlug(base,exceptId){const s0=slugify(base);let n=2,t=s0;while(books.some(b=>b.slug===t&&b.id!==exceptId))t=s0+'-'+n++;return t}
+async function migrateLegacy(){
+  loadBooks();if(books.length)return;
+  const buf=await DB.get('pdf');if(!buf)return;
+  const nm=(((await DB.get('pdfname'))||'My book')+'').replace(/\.pdf$/i,'').replace(/_+/g,' ').trim()||'My book';
+  const b={id:rid(),slug:uniqueSlug(nm),name:nm,pdfName:(await DB.get('pdfname'))||'',refName:(await DB.get('refname'))||'',legacy:true};
+  await DB.set(`book:${b.id}:pdf`,buf);
+  const ref=await DB.get('ref');if(ref)await DB.set(`book:${b.id}:ref`,ref);
+  for(const k of ['pdf','pdfname','ref','refname'])await DB.set(k,null);
+  const pos=cfg.get('pos','');if(pos)cfg.set('pos:'+b.id,pos);
+  const po=cfg.get('pageOffset','');if(po)cfg.set('pageOffset:'+b.id,po);
+  books=[b];saveBooks();cfg.set('lastBook',b.id);
+}
+function fillBookSel(){
+  const sel=$('bookSel');sel.innerHTML='';
+  if(!books.length){const o=document.createElement('option');o.value='';o.textContent='No book yet';sel.appendChild(o)}
+  books.forEach(b=>{const o=document.createElement('option');o.value=b.id;o.textContent=b.name;sel.appendChild(o)});
+  const n=document.createElement('option');n.value='__new';n.textContent='＋ New book…';sel.appendChild(n);
+  sel.value=book?book.id:'';if(!book&&books.length)sel.selectedIndex=0;
+}
+function resetPanes(msg){
+  $('script').innerHTML=`<p class="empty">${msg}</p>`;$('script').dataset.txt='';$('booktext').innerHTML='';
+  $('time').textContent='0:00 / 0:00';$('seek').value=0;updateButtons();
+}
+async function openBook(id,opts={}){
+  cancelAll();audio.pause();audio.removeAttribute('src');secReady=false;curScript=null;
+  pdf=null;DATA={chapters:[],ref:{}};autoOffset=null;refInfo={state:'none',name:'',msg:''};chunks=[];viewPage=0;paraFrac=[];paraTimes=[];curSegs=null;chapIdx=0;chunkIdx=0;
+  const cv=$('pdfwrap').querySelector('canvas');if(cv)cv.remove();$('empty').style.display='';
+  $('chapter').innerHTML='';$('chunks').innerHTML='';$('pLabel').textContent='No page';status('');
+  book=books.find(b=>b.id===id)||null;
+  document.title=book?`${book.name} · Book Voice`:'Book Voice';
+  if(book)cfg.set('lastBook',book.id);
+  fillBookSel();
+  resetPanes('Add your API key in Settings and a book in Book setup, then pick a section and press <b>Generate lecture</b>.');
+  if(book){
+    try{const buf=opts.buf||await DB.get(bk('pdf'));if(buf)await loadPdfData(buf);else status('This book has no PDF on this device. Open Book setup to load it.',true)}
+    catch(e){status('Could not open this book\'s PDF: '+(e.message||e),true)}
+  }
+  renderSteps();updateHash();
+}
+async function createBook(f,buf){
+  let title='';
+  try{const doc=await pdfjsLib.getDocument({data:new Uint8Array(buf.slice(0))}).promise;const md=await doc.getMetadata();title=((md&&md.info&&md.info.Title)||'').trim();doc.destroy()}catch(e){}
+  const fname=f.name.replace(/\.pdf$/i,'').replace(/_+/g,' ').trim();
+  const name=$('bookName').value.trim()||(title.length>3&&!/^(microsoft word|untitled)/i.test(title)?title:fname)||'New book';
+  const b={id:rid(),slug:uniqueSlug(hintSlug||name),name,pdfName:f.name,refName:''};
+  hintSlug='';books.push(b);saveBooks();
+  book=b;await DB.set(bk('pdf'),buf);dlgNew=false;
+  await openBook(b.id,{buf});
+}
+// URL: #/<book>/<chapter>/<section>
+function updateHash(){
+  if(!book||!DATA.chapters.length)return;const ch=DATA.chapters[chapIdx];if(!ch)return;
+  const h=`#/${book.slug}/${ch.n}/${chunkIdx+1}`;if(location.hash!==h){try{history.replaceState(null,'',h)}catch(e){}}
+}
+function parseHash(){const m=location.hash.match(/^#\/([^/]+)(?:\/(\d+)\/(\d+))?/);return m?{slug:decodeURIComponent(m[1]),ch:m[2]?+m[2]:null,sec:m[3]?+m[3]:null}:null}
+async function gotoRoute(r){
+  const b=books.find(x=>x.slug===r.slug||x.id===r.slug);
+  if(!b){openBookDialog(true,r.slug);return}
+  if(!book||b.id!==book.id){pendingRoute=r;await openBook(b.id);return}
+  if(r.ch){const ci=DATA.chapters.findIndex(c=>c.n===r.ch);if(ci>=0){
+    if(ci!==chapIdx){cancelAll();audio.pause();chapIdx=ci;$('chapter').value=ci;buildChunks();markCurrent()}
+    await selectChunk(Math.max(0,Math.min((r.sec||1)-1,chunks.length-1)))}}
+}
+window.addEventListener('hashchange',()=>{const r=parseHash();if(r)gotoRoute(r)});
 
 // ---------- PDF ----------
 async function loadPdfData(buf){
@@ -315,11 +419,14 @@ async function setupBook(){
   DATA.chapters=await chaptersFromOutline();
   const sel=$('chapter');sel.innerHTML='';
   DATA.chapters.forEach((c,i)=>{const o=document.createElement('option');o.value=i;o.textContent=`Ch. ${c.n} — ${c.title}`;sel.appendChild(o)});
-  try{const p=JSON.parse(cfg.get('pos','null'));if(p){chapIdx=Math.min(p.chapIdx||0,DATA.chapters.length-1);chunkIdx=p.chunkIdx||0}}catch(e){}
+  chapIdx=0;chunkIdx=0;
+  try{const p=JSON.parse(cfg.get('pos:'+(book?book.id:''),'null'));if(p){chapIdx=Math.min(p.chapIdx||0,DATA.chapters.length-1);chunkIdx=p.chunkIdx||0}}catch(e){}
+  if(pendingRoute&&pendingRoute.ch){const ci=DATA.chapters.findIndex(c=>c.n===pendingRoute.ch);if(ci>=0){chapIdx=ci;chunkIdx=Math.max(0,(pendingRoute.sec||1)-1)}}
+  pendingRoute=null;
   sel.value=chapIdx;buildChunks();if(chunkIdx>=chunks.length)chunkIdx=0;markCurrent();
   showPage(chunks[chunkIdx]?chunks[chunkIdx].pages[0]:1);
   if(chunks[chunkIdx])await loadSection(chunkIdx);
-  const ia=await DB.get('ref');if(ia){refInfo={state:'ok',name:(await DB.get('refname'))||'archive text',msg:'Matching…'};renderSteps();await alignRef(ia)}
+  const ia=await DB.get(bk('ref'));if(ia){refInfo={state:'ok',name:(await DB.get(bk('refname')))||'archive text',msg:'Matching…'};renderSteps();await alignRef(ia)}
   renderSteps();
 }
 function parseArchive(text){
@@ -370,7 +477,7 @@ async function pageImage(n){ // JPEG base64 for Gemini
 }
 
 // ---------- Book (printed) page numbers ----------
-function pageOffset(){const m=parseInt(cfg.get('pageOffset',''),10);return Number.isFinite(m)?m:autoOffset}
+function pageOffset(){const m=parseInt(cfg.get('pageOffset:'+(book?book.id:''),''),10);return Number.isFinite(m)?m:autoOffset}
 function bookPageOf(p){const o=pageOffset();if(o==null)return null;const n=p-o;return n>=1?n:null}
 function pageLabel(n){const b=bookPageOf(n);return b?`Book p. ${b} · PDF ${n} / ${pdf.numPages}`:`PDF page ${n} / ${pdf.numPages}`}
 function chipText(c){const a=c.pages[0],z=c.pages[c.pages.length-1],ba=bookPageOf(a),bz=bookPageOf(z);return ba&&bz?`${ba}–${bz}`:`${a}–${z}`}
@@ -392,11 +499,11 @@ function buildChunks(){
   $('chapInfo').textContent=`PDF pages ${ch.start}–${ch.end} · ${chunks.length} sections`;
   const box=$('chunks');box.innerHTML='';
   chunks.forEach(c=>{const b=document.createElement('button');b.textContent=chipText(c);b.title=chipTitle(c);b.onclick=()=>selectChunk(c.i);b.dataset.i=c.i;box.appendChild(b);
-    DB.get('script:'+c.key).then(s=>{if(s&&s.audio)b.classList.add('done')})});
+    DB.get(skey(c)).then(s=>{if(s&&s.audio)b.classList.add('done')})});
 }
 function markCurrent(){document.querySelectorAll('#chunks button').forEach(b=>b.classList.toggle('cur',+b.dataset.i===chunkIdx));
   const cb=document.querySelector(`#chunks button[data-i="${chunkIdx}"]`);if(cb)cb.scrollIntoView({block:'nearest',inline:'center'})}
-function saveProgress(){cfg.set('pos',JSON.stringify({chapIdx,chunkIdx,rate:audio.playbackRate}))}
+function saveProgress(){if(!book)return;cfg.set('pos:'+book.id,JSON.stringify({chapIdx,chunkIdx}));updateHash()}
 async function selectChunk(i){
   audio.pause();chunkIdx=i;markCurrent();saveProgress();
   if(job&&job.error)job=null;
@@ -404,7 +511,7 @@ async function selectChunk(i){
   await loadSection(i);renderProg();
 }
 async function loadSection(i){
-  const rec=await DB.get('script:'+chunks[i].key);
+  const rec=await DB.get(skey(chunks[i]));
   if(i!==chunkIdx)return;
   if(rec&&rec.script&&rec.audio){
     curScript=rec.script;renderScript(rec.script);
@@ -456,7 +563,7 @@ async function gem(model,body,rounds=4,ctl=null){
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const textOf=r=>((r.candidates&&r.candidates[0]&&r.candidates[0].content&&r.candidates[0].content.parts)||[]).filter(p=>!p.thought).map(p=>p.text||'').join('').trim();
 
-const LECTURE_BASE="You are a warm, rigorous university physics instructor giving a spoken lecture to one student who is studying the attached textbook pages, with the page images open in front of them. Teach the content IN YOUR OWN WORDS, in the same order as the pages. Do not quote the book verbatim. ";
+const LECTURE_BASE="You are a warm, rigorous university instructor (the subject is physics or mathematics) giving a spoken lecture to one student who is studying the attached textbook pages, with the page images open in front of them. Teach the content IN YOUR OWN WORDS, in the same order as the pages. Do not quote the book verbatim. ";
 const LECTURE_REFS="KEEP THE BOOK'S CROSS-REFERENCES. The pages refer to figures, equations, tables, sections, examples and problems by number (for example 'Fig. 2.6', 'Eq. (2.1)', 'Section 2-3'). Your lecture must keep these references so the listener knows exactly where to look while listening: say 'look at figure 2.6, at the bottom of the page' (add where it is on the page when that helps: top, middle, bottom, left, right); when you explain a numbered equation, say its number ('this is equation 2.1'); when the text points back to an earlier equation or figure, say so ('recall equation 1.4'). Mention every figure and numbered equation that the page text refers to or that carries a key idea. Read numbers aloud the way a person would ('figure two point six', 'equation two point one'). When you move on to a new book page, say so briefly ('on page 65'). ";
 const LECTURE_STANDARD="Cover every idea, definition, derivation step, equation, worked example and figure. Describe each figure briefly and say what it shows. Skip running headers and footers. ";
 const LECTURE_CONCISE="Be concise: this is a study aid, not a dictation. Focus on the key information the student must understand and remember: core definitions, the main results, the reasoning that connects them, and the important equations. Leave out filler, repetition, historical asides, and the arithmetic inside examples (give the setup and the result). Refer to a figure in one short sentence, by its number, whenever the text refers to it or it carries a key idea. Aim for roughly one third of the words on the pages, in short plain sentences, and never announce what you are about to say. Skip running headers and footers. ";
@@ -467,7 +574,7 @@ async function makeScript(ch,chunk,prevTail,ctl){
   const imgs=[];for(let k=0;k<chunk.pages.length;k++){chk(ctl);ctl.stage('read',k+1,chunk.pages.length);imgs.push(await pageImage(chunk.pages[k]))}
   const ref=chunk.pages.map(p=>`[${bookPageOf(p)?'Book page '+bookPageOf(p)+' (PDF page '+p+')':'PDF page '+p}]\n${DATA.ref[p]||''}`).join('\n\n');
   const intro=chunk.i===0?"This is the start of the chapter; open by briefly introducing it. ":"This continues a lecture already under way; do NOT greet or re-introduce. Continue smoothly. ";
-  const text=`${lectureStyle()}\n\nBook: Berkeley Physics Course Vol. 1, Mechanics. Chapter ${ch.n}: ${ch.title}. ${intro}`+
+  const text=`${lectureStyle()}\n\nBook: ${book?book.name:'textbook'}. Chapter ${ch.n}: ${ch.title}. ${intro}`+
    (prevTail?`The previous section of the lecture ended with: "${prevTail}"\n`:'')+
    (ref.replace(/\[[^\]]*\]|\s/g,'')?`\nBelow is a machine-readable text of these pages for reference. It is imperfect and its equations and figures are missing, so rely on the page images for the mathematics, the figures and the equation numbers:\n${ref.slice(0,9000)}`:'\nRely on the page images for all text, mathematics and figures.');
   const parts=[{text}];imgs.forEach((d,k)=>{const p=chunk.pages[k],bp=bookPageOf(p);parts.push({text:bp?`Image ${k+1} is book page ${bp} (PDF page ${p}):`:`Image ${k+1} is PDF page ${p}:`});parts.push({inline_data:{mime_type:'image/jpeg',data:d}})});
@@ -510,12 +617,12 @@ function pcmToWav(chunksArr){
 
 // Make (or load) a lecture for a section; returns the saved record
 async function ensureChunk(i,ctl){
-  const ch=DATA.chapters[chapIdx],chunk=chunks[i],key='script:'+chunk.key;
+  const ch=DATA.chapters[chapIdx],chunk=chunks[i],key=skey(chunk);
   let rec=await DB.get(key);
   if(rec&&rec.script&&rec.audio)return rec;
   if(!pdf)throw new Error('Load the book PDF first.');
   let prevTail='';
-  if(i>0){const pr=await DB.get('script:'+chunks[i-1].key);if(pr&&pr.script)prevTail=pr.script.slice(-500)}
+  if(i>0){const pr=await DB.get(skey(chunks[i-1]));if(pr&&pr.script)prevTail=pr.script.slice(-500)}
   if(!rec||!rec.script){rec={script:await makeScript(ch,chunk,prevTail,ctl)};chk(ctl);await DB.set(key,rec)}
   ctl.script(rec.script);
   const segs=splitSegments(rec.script);const pcm=[];
@@ -530,7 +637,7 @@ const chk=ctl=>{if(ctl&&ctl.cancelled)throw new Error('cancelled')};
 const secLabel=i=>{const c=chunks[i];if(!c)return '';const a=c.pages[0],z=c.pages[c.pages.length-1],ba=bookPageOf(a),bz=bookPageOf(z);return ba&&bz?`book pp. ${ba}–${bz}`:`PDF pp. ${a}–${z}`};
 const mmss=s=>{s=Math.max(0,Math.floor(s));return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')};
 const jobActive=()=>job&&!job.done&&!job.error;
-function setBusyChip(i,on){const b=document.querySelector(`#chunks button[data-i="${i}"]`);if(b){b.classList.toggle('busy',on);if(!on&&on!==undefined)DB.get('script:'+chunks[i].key).then(r=>{if(r&&r.audio)b.classList.add('done')})}}
+function setBusyChip(i,on){const b=document.querySelector(`#chunks button[data-i="${i}"]`);if(b){b.classList.toggle('busy',on);if(!on&&on!==undefined)DB.get(skey(chunks[i])).then(r=>{if(r&&r.audio)b.classList.add('done')})}}
 function makeJob(i,bg,autoplay){
   const j={i,bg,autoplay:!!autoplay,stage:'read',cur:0,total:chunks[i].pages.length,t0:Date.now(),tStage:Date.now(),tStep:Date.now(),note:'',error:null,done:false,text:'starting…',
     ctl:{cancelled:false,ac:new AbortController()}};
@@ -561,7 +668,7 @@ function generate(i,autoplay){
 }
 async function prefetch(i){
   if(cfg.get('prefetch','1')!=='1'||i>=chunks.length||bgJob||jobActive())return;
-  const rec=await DB.get('script:'+chunks[i].key);if(rec&&rec.script&&rec.audio)return;
+  const rec=await DB.get(skey(chunks[i]));if(rec&&rec.script&&rec.audio)return;
   if(bgJob||jobActive())return;
   bgJob=makeJob(i,true,false);runJob(bgJob);renderProg();
 }
@@ -603,9 +710,9 @@ function updateButtons(){
   const active=jobActive(),here=active&&job.i===chunkIdx;
   const failedHere=job&&job.error&&job.i===chunkIdx;
   $('btnGen').hidden=secReady||here;
-  $('btnGen').disabled=active&&!here;
+  $('btnGen').disabled=(active&&!here)||!pdf||!cfg.get('key','');
   $('btnGen').innerHTML=IC.gen+'<span>'+(failedHere?'Try again':'Generate lecture')+'</span>';
-  $('btnGen').title=(active&&!here)?'Another section is generating right now':'';
+  $('btnGen').title=(active&&!here)?'Another section is generating right now':!pdf?'Add a book in Book setup first':!cfg.get('key','')?'Add your API key in Settings first':'';
   $('btnPlay').hidden=!secReady;$('script').classList.toggle('seekable',secReady);
 }
 $('btnGen').onclick=()=>generate(chunkIdx,false);
@@ -685,7 +792,7 @@ audio.addEventListener('timeupdate',()=>{
 audio.addEventListener('play',setPlayLabel);audio.addEventListener('pause',setPlayLabel);
 audio.addEventListener('loadedmetadata',()=>{$('time').textContent='0:00 / '+fmt(audio.duration);computeParaTimes()});
 audio.addEventListener('ended',async()=>{setPlayLabel();
-  DB.set('prog:'+chunks[chunkIdx].key,1);
+  DB.set(skey(chunks[chunkIdx]).replace('script:','prog:'),1);
   if(chunkIdx+1<chunks.length){await selectChunk(chunkIdx+1);if(secReady)startPlayback();else generate(chunkIdx,true)}
   else status('Chapter finished. Pick the next chapter when ready.')});
 $('seek').oninput=()=>{if(audio.duration)audio.currentTime=audio.duration*$('seek').value/1000};
@@ -744,9 +851,9 @@ async function ask(question,mode){
   try{
     const ch=DATA.chapters[chapIdx];const imgs=await currentImages();chk(ctl);
     let prior='';
-    for(let j=0;j<chunkIdx;j++){const r=await DB.get('script:'+chunks[j].key);if(r&&r.script)prior+=r.script+'\n\n'}
+    for(let j=0;j<chunkIdx;j++){const r=await DB.get(skey(chunks[j]));if(r&&r.script)prior+=r.script+'\n\n'}
     const heard=(prior+heardSoFar()).slice(-14000);
-    const sys=`You are a warm, rigorous physics instructor tutoring one student who is listening to a spoken lecture on Berkeley Physics Course Vol. 1 (Mechanics), Chapter ${ch.n}: ${ch.title}. The attached images are the textbook pages being covered right now. Answer clearly and concisely (under 150 words unless a derivation needs more) in plain spoken English: no markdown, no LaTeX; say equations in words. Be accurate; if the question goes beyond the pages, say so and still help.`;
+    const sys=`You are a warm, rigorous university instructor tutoring one student who is listening to a spoken lecture on the textbook "${book?book.name:'this book'}", Chapter ${ch.n}: ${ch.title}. The attached images are the textbook pages being covered right now. Answer clearly and concisely (under 150 words unless a derivation needs more) in plain spoken English: no markdown, no LaTeX; say equations in words. Be accurate; if the question goes beyond the pages, say so and still help.`;
     const task=mode==='recap'?'Give a concise recap (about 5 to 7 sentences) of what has been covered so far in this lecture, highlighting key definitions and equations in words, and finish with what the student should be ready to hear next.':question;
     const hist=qaHistory.slice(-4).map(h=>`Student: ${h.q}\nInstructor: ${h.a}`).join('\n\n');
     const parts=[{text:`${sys}\n\nLecture heard so far:\n"""\n${heard}\n"""\n\n${hist?'Earlier questions this session:\n'+hist+'\n\n':''}${mode==='recap'?'Task':'Student question'}: ${task}`}].concat(imgs.map(d=>({inline_data:{mime_type:'image/jpeg',data:d}})));
@@ -791,7 +898,7 @@ function renderBook(){
   c.pages.forEach(p=>{
     const bp=bookPageOf(p),h=document.createElement('h4');h.title='Show this page in the PDF';
     h.append(bp?`Book page ${bp}`:`PDF page ${p}`);if(bp){const sp=document.createElement('span');sp.textContent=`PDF ${p}`;h.append(sp)}
-    h.onclick=()=>{$('follow').checked=false;showPage(p)};box.appendChild(h);
+    h.onclick=()=>{setFollow(false);showPage(p)};box.appendChild(h);
     const t=DATA.ref[p]||'';const multi=/\n\s*\n/.test(t);
     let list=multi?t.split(/\n\s*\n/).map(x=>x.trim()).filter(Boolean):[t];
     if(multi){list=list.filter(x=>!/^\d{1,3}$/.test(x)&&!/^\d{1,3}\s+Chapter\s+\d+$/i.test(x));
@@ -828,61 +935,125 @@ async function checkKey(){
   renderSteps();
 }
 function setStep(id,cls,icon,detail,btn){
-  const el=$('st'+id);el.className='step'+(id===4?' go':'')+(cls?' '+cls:'');
+  const el=$('st'+id);el.className='step'+(cls?' '+cls:'');
   el.querySelector('.ico').textContent=icon;$('d'+id).textContent=detail;$('d'+id).title=detail;
   if(btn!==undefined)$('b'+id).textContent=btn;
 }
 function renderSteps(){
-  const hasPdf=!!pdf,hasKey=!!cfg.get('key','');
-  setStep(1,hasPdf?'ok':'wait',hasPdf?'✓':'1',hasPdf?`${pdfName||'PDF'} · ${pdf.numPages} pages`:'Not loaded yet',hasPdf?'Change…':'Choose PDF…');
+  const hasKey=!!cfg.get('key','');
+  const show=!dlgNew&&!!book&&!!pdf;
+  setStep(1,show?'ok':'wait',show?'✓':'1',show?`${book.pdfName||'PDF'} · ${pdf.numPages} pages`:'Not loaded yet',show?'Change…':'Choose PDF…');
   const r=refInfo;
-  if(r.state==='ok')setStep(2,'ok','✓',`${r.name||'Archive text'} · ${r.msg}`,'Change…');
+  if(!show)setStep(2,'opt','–','Choose the PDF first.','Choose file…');
+  else if(r.state==='ok')setStep(2,'ok','✓',`${r.name||'Archive text'} · ${r.msg}`,'Change…');
   else if(r.state==='bad')setStep(2,'bad','!',r.msg,'Choose file…');
   else setStep(2,'opt','–','Skipped. The lecture will use the page images only.','Choose file…');
-  const k=keyInfo;
-  if(!hasKey)setStep(3,'wait','3','Not set','Set key…');
-  else if(k.state==='bad')setStep(3,'bad','!',k.msg,'Change…');
-  else if(k.state==='ok')setStep(3,'ok','✓',k.msg,'Change…');
-  else setStep(3,k.state==='warn'?'ok':'wait',k.state==='warn'?'✓':'…',k.msg||'Saved','Change…');
-  const ready=hasPdf&&hasKey&&keyInfo.state!=='bad';
-  const miss=[];if(!hasPdf)miss.push('step 1');if(!hasKey)miss.push('step 3');else if(keyInfo.state==='bad')miss.push('a valid key in step 3');
-  setStep(4,ready?'ready':'',ready?'✓':'4',ready?'Everything is set. Start generates the current section, then plays it.':`Waiting for ${miss.join(' and ')}`);
-  $('b4').disabled=!ready;
+  $('b2').disabled=!show;
+  const k=keyInfo,ks=$('keyStatus');
+  ks.textContent=!hasKey?'No key saved yet.':(k.msg||'');ks.className='hint'+(hasKey&&k.state==='ok'?' good':k.state==='bad'?' bad':'');
+  $('dotSet').hidden=hasKey&&k.state!=='bad';
+  $('dotBook').hidden=!!pdf;
+  updateButtons();
 }
 $('b1').onclick=()=>$('pdfFile').click();
 $('b2').onclick=()=>$('refFile').click();
-$('b3').onclick=()=>{$('btnSettings').click();setTimeout(()=>$('key').focus(),50)};
-$('b4').onclick=()=>{if(secReady)startPlayback();else generate(chunkIdx,true)};
+
+// ---------- Book setup dialog ----------
+function fillBookDialog(){
+  $('bookDlgTitle').textContent=dlgNew?'New book':'Book setup';
+  $('bookName').value=dlgNew?(hintSlug?hintSlug.replace(/-+/g,' ').replace(/\b\w/g,m=>m.toUpperCase()):''):(book?book.name:'');
+  const note=$('bookNote');note.hidden=!hintSlug;note.textContent=hintSlug?"This link is for a book that is not on this device yet. Load its PDF below to add it.":'';
+  $('btnDelBook').hidden=dlgNew;
+  const po=$('pageOffset');po.disabled=dlgNew;po.value=dlgNew||!book?'':cfg.get('pageOffset:'+book.id,'');po.placeholder=autoOffset!=null&&!dlgNew?`automatic (${autoOffset})`:'automatic';
+  renderSteps();
+}
+function openBookDialog(isNew,hint){
+  dlgNew=!!isNew||!book;hintSlug=hint||'';
+  fillBookDialog();if(!$('bookDlg').open)$('bookDlg').showModal();
+}
+$('btnBook').onclick=()=>openBookDialog(false);
+$('btnPdf2').onclick=()=>openBookDialog(false);
+$('bookName').addEventListener('change',()=>{
+  if(dlgNew||!book)return;const v=$('bookName').value.trim();if(!v)return;
+  book.name=v;book.slug=uniqueSlug(v,book.id);saveBooks();fillBookSel();document.title=`${book.name} · Book Voice`;updateHash();
+});
+$('pageOffset').addEventListener('change',()=>{
+  if(dlgNew||!book)return;cfg.set('pageOffset:'+book.id,$('pageOffset').value.trim());
+  relabel();if(pdf&&viewPage)$('pLabel').textContent=pageLabel(viewPage);renderBook();
+});
+$('btnDelBook').onclick=async()=>{
+  if(!book||!confirm(`Delete "${book.name}" from this device? Its PDF, archive text and saved lectures will be removed.`))return;
+  const id=book.id,legacy=book.legacy;
+  await DB.clearPrefix(`book:${id}:`);await DB.clearPrefix(legacy?'script:ch':`script:${id}:`);await DB.clearPrefix(legacy?'prog:ch':`prog:${id}:`);
+  books=books.filter(b=>b.id!==id);saveBooks();
+  const next=books[0];$('bookDlg').close();book=null;await openBook(next?next.id:'');
+};
+$('bookSel').onchange=e=>{
+  const v=e.target.value;
+  if(v==='__new'){e.target.value=book?book.id:'';openBookDialog(true);return}
+  if(v&&(!book||v!==book.id))openBook(v);
+};
+function setFollow(on){
+  $('follow').checked=on;const b=$('btnFollow');b.classList.toggle('on',on);b.setAttribute('aria-pressed',String(on));
+  b.title=on?'The page follows the lecture. Click to turn off.':'The page stays where you put it. Click to follow the lecture again.';
+}
+$('btnFollow').onclick=()=>{
+  const on=!$('follow').checked;setFollow(on);
+  if(on&&chunks[chunkIdx]){const pg=chunks[chunkIdx].pages,d=audio.duration||0;showPage(d&&!audio.paused?pg[Math.min(pg.length-1,Math.floor(audio.currentTime/d*pg.length))]:pg[0])}
+};
 
 // ---------- Settings & init ----------
-$('btnSettings').onclick=()=>{$('key').value=cfg.get('key','');$('voice').value=cfg.get('voice','Kore');$('model').value=TEXT_MODEL();$('ttsModel').value=cfg.get('ttsModel','gemini-3.8-flash-tts');$('chunkPages').value=cfg.get('chunkPages','3');$('prefetchOn').value=cfg.get('prefetch','1');$('pageOffset').value=cfg.get('pageOffset','');$('pageOffset').placeholder=autoOffset!=null?`automatic (${autoOffset})`:'automatic';$('dlg').showModal()};
+$('btnSettings').onclick=()=>{$('key').value=cfg.get('key','');$('voice').value=cfg.get('voice','Kore');$('model').value=TEXT_MODEL();$('ttsModel').value=cfg.get('ttsModel','gemini-3.8-flash-tts');$('chunkPages').value=cfg.get('chunkPages','3');$('prefetchOn').value=cfg.get('prefetch','1');renderSteps();$('dlg').showModal()};
 $('dlg').addEventListener('close',()=>{
-  if($('dlg').returnValue!=='ok')return;
-  cfg.set('key',$('key').value.trim());cfg.set('voice',$('voice').value);cfg.set('textModel',$('model').value);cfg.set('ttsModel',$('ttsModel').value);SESSION_PREF.text=SESSION_PREF.tts=null;
-  cfg.set('prefetch',$('prefetchOn').value);cfg.set('pageOffset',$('pageOffset').value.trim());relabel();if(pdf)$('pLabel').textContent=pageLabel(viewPage);renderBook();const old=cfg.get('chunkPages','3');cfg.set('chunkPages',$('chunkPages').value);
-  if(old!==$('chunkPages').value){cancelAll();audio.pause();buildChunks();chunkIdx=0;markCurrent();loadSection(0)}
-  status('Settings saved.');checkKey();
+  if($('dlg').returnValue==='ok'){
+    cfg.set('key',$('key').value.trim());cfg.set('voice',$('voice').value);cfg.set('textModel',$('model').value);cfg.set('ttsModel',$('ttsModel').value);SESSION_PREF.text=SESSION_PREF.tts=null;
+    cfg.set('prefetch',$('prefetchOn').value);const old=cfg.get('chunkPages','3');cfg.set('chunkPages',$('chunkPages').value);
+    if(old!==$('chunkPages').value&&chunks[chunkIdx]){cancelAll();audio.pause();buildChunks();chunkIdx=0;markCurrent();loadSection(0)}
+    status('Settings saved.');checkKey();
+  }
+  if(firstRunChain){firstRunChain=false;if(!book)openBookDialog(true)}
 });
-$('btnClear').onclick=async()=>{if(confirm('Delete all saved lectures and audio on this device?')){await DB.clearPrefix('script:');await DB.clearPrefix('prog:');buildChunks();status('Cleared.')}};
+$('btnClear').onclick=async()=>{if(confirm('Delete the saved lectures and audio of ALL books on this device?')){await DB.clearPrefix('script:');await DB.clearPrefix('prog:');if(chunks.length){buildChunks();markCurrent();loadSection(chunkIdx)}status('Cleared.')}};
 VOICES.forEach(v=>{const o=document.createElement('option');o.textContent=v;$('voice').appendChild(o)});
-$('btnPdf2').onclick=()=>$('pdfFile').click();
-$('pdfFile').onchange=async e=>{const f=e.target.files[0];if(!f)return;status('Loading PDF…');const buf=await f.arrayBuffer();try{await loadPdfData(buf);await DB.set('pdf',buf);pdfName=f.name;await DB.set('pdfname',f.name);status('')}catch(err){status('That file could not be opened as a PDF.',true)}renderSteps()};
-$('pPrev').onclick=()=>{$('follow').checked=false;showPage(viewPage-1)};
-$('pNext').onclick=()=>{$('follow').checked=false;showPage(viewPage+1)};
+$('pdfFile').onchange=async e=>{
+  const f=e.target.files[0];e.target.value='';if(!f)return;
+  status('Loading PDF…');
+  try{
+    const buf=await f.arrayBuffer();
+    if(dlgNew||!book){await createBook(f,buf)}
+    else{await DB.set(bk('pdf'),buf);book.pdfName=f.name;saveBooks();await loadPdfData(buf)}
+    status('');
+  }catch(err){status('That file could not be opened as a PDF.',true)}
+  if($('bookDlg').open)fillBookDialog();else renderSteps();
+};
+$('pPrev').onclick=()=>{setFollow(false);showPage(viewPage-1)};
+$('pNext').onclick=()=>{setFollow(false);showPage(viewPage+1)};
 $('chapter').onchange=async e=>{if(!DATA.chapters.length)return;cancelAll();audio.pause();chapIdx=+e.target.value;chunkIdx=0;buildChunks();markCurrent();saveProgress();if(pdf)showPage(DATA.chapters[chapIdx].start);await loadSection(0)};
 
-$('refFile').onchange=async e=>{const f=e.target.files[0];if(!f)return;status('Reading archive text…');
+$('refFile').onchange=async e=>{
+  const f=e.target.files[0];e.target.value='';if(!f||!book||dlgNew)return;
+  status('Reading archive text…');
   const pages=parseArchive(await f.text());
   if(!pages){refInfo={state:'bad',name:f.name,msg:'No page breaks in this file. Use the “DjVu XML” file from archive.org.'};status('');renderSteps();return}
-  await DB.set('ref',pages);await DB.set('refname',f.name);refInfo={state:'ok',name:f.name,msg:'Saved'};
+  await DB.set(bk('ref'),pages);await DB.set(bk('refname'),f.name);book.refName=f.name;saveBooks();
+  refInfo={state:'ok',name:f.name,msg:'Saved'};
   if(pdf)await alignRef(pages);else status('');
-  renderSteps()};
+  status('');renderSteps();
+};
 (async function init(){
-  setSpeed(cfg.get('speed','1'));syncSeg();setPlayLabel();setView(cfg.get('view','lecture'));
+  setSpeed(cfg.get('speed','1'));syncSeg();setPlayLabel();setView(cfg.get('view','lecture'));setFollow(true);
   if(typeof pdfjsLib==='undefined'){status('PDF viewer failed to load (network).',true);return}
   try{const w=await (await fetch('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js')).text();pdfjsLib.GlobalWorkerOptions.workerSrc=URL.createObjectURL(new Blob([w],{type:'text/javascript'}))}catch(e){pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'}
-  pdfName=(await DB.get('pdfname'))||'';const saved=await DB.get('pdf');if(saved){try{await loadPdfData(saved)}catch(e){status('Could not reopen the saved PDF: '+e.message,true)}}
-  renderSteps();checkKey();
+  await migrateLegacy();loadBooks();
+  const r=parseHash();let id='',unknown='';
+  if(r){const b=books.find(x=>x.slug===r.slug||x.id===r.slug);if(b){id=b.id;pendingRoute=r}else unknown=r.slug}
+  if(!id)id=cfg.get('lastBook','');
+  if(!books.some(b=>b.id===id))id=books[0]?books[0].id:'';
+  await openBook(id);
+  checkKey();
+  if(!cfg.get('key','')){firstRunChain=!book||!!unknown;if(unknown)hintSlug=unknown;$('btnSettings').click()}
+  else if(unknown)openBookDialog(true,unknown);
+  else if(!book)openBookDialog(true);
 })();
 </script>
 </body>
